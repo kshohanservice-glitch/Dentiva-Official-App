@@ -38,8 +38,9 @@ interface FieldWrapProps {
 }
 
 export function Field({ label, required, error, hint, children, className }: FieldWrapProps) {
+  // Real <label> so screen readers and Playwright getByLabel resolve the control.
   return (
-    <div className={`field ${className ?? ''}`}>
+    <label className={`field ${className ?? ''}`}>
       {label && (
         <span className="field-label">
           {label} {required && <span className="req">*</span>}
@@ -47,7 +48,7 @@ export function Field({ label, required, error, hint, children, className }: Fie
       )}
       {children}
       {error ? <span className="field-error">{error}</span> : hint ? <span className="field-hint">{hint}</span> : null}
-    </div>
+    </label>
   );
 }
 

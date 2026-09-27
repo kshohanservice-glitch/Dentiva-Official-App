@@ -29,6 +29,14 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    // E2E / integration isolation: DENTIVA_USER_DATA redirects every app-managed
+    // directory (DB, logs, attachments, branding) into a disposable folder so
+    // tests never touch a real clinic's userData.
+    const override = process.env.DENTIVA_USER_DATA?.trim();
+    if (override) {
+      fs.mkdirSync(override, { recursive: true });
+      app.setPath('userData', override);
+    }
     initPaths(app.getPath('userData'));
     initLogger(logsDir());
     for (const d of [dataDir(), attachmentsDir(), brandingDir(), tempDir()]) {

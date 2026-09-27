@@ -22,6 +22,7 @@ import { AppError, ValidationError } from '../util/errors';
 import { attachmentsDir, brandingDir, dataDir, documentsDir } from '../util/paths';
 import { nowIso } from '../../shared/datetime';
 import { audit } from './audit';
+import { notify } from './notifications';
 import { logger } from '../util/logger';
 import { getSettingInt, getSetting } from './settings';
 import { APP_VERSION } from '../version';
@@ -75,7 +76,7 @@ export async function createBackup(kind: 'manual' | 'auto' | 'pre-restore' = 'ma
   const folder = defaultBackupFolder();
   try {
     fs.mkdirSync(folder, { recursive: true });
-  } catch (err) {
+  } catch {
     throw new AppError('BACKUP_FOLDER', `The backup folder is not writable: ${folder}`);
   }
 
@@ -374,7 +375,6 @@ export async function runAutoBackupIfDue(): Promise<void> {
   } catch (err) {
     logger.error('backup.auto_failed', { message: String(err) });
     try {
-      const { notify } = require('./notifications') as typeof import('./notifications');
       notify('backup', 'critical', 'Automatic backup failed', err instanceof Error ? err.message : String(err), 'page:backup', 'backup:auto-fail');
     } catch {
       /* notification subsystem unavailable */

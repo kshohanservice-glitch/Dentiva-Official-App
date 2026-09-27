@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override (optional, defaults to package.json)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build · Test · Package NSIS · Publish
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit + integration tests
+        run: npm test
+
+      - name: Build app (main + preload + renderer)
+        run: npm run build
+
+      - name: Generate Windows icon
+        run: npm run icon
+        continue-on-error: true
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E (47 mandatory flows)
+        env:
+          DENTIVA_E2E_ACTIVATION_CODE: ${{ secrets.DENTIVA_E2E_ACTIVATION_CODE }}
+        run: npm run test:e2e
+
+      - name: Package NSIS installer (electron-builder)
+        run: npm run pack:win
+        env:
+          # electron-builder picks GH_TOKEN for publish; we publish manually below
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Validate installer artifact
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path dist -Filter "Dentiva-Pro-Setup-*.exe" -Recurse | Select-Object -First 1
+          if (-not $exe) { throw "Installer .exe not found under dist/" }
+          if ($exe.Length -lt 1MB) { throw "Installer too small: $($exe.Length) bytes" }
+          Write-Host "OK: $($exe.FullName) ($([math]::Round($exe.Length/1MB,2)) MB)"
+          "INSTALLER_PATH=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "INSTALLER_NAME=$($exe.Name)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: SHA-256 checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Algorithm SHA256 $env:INSTALLER_PATH).Hash.ToLower()
+          "$hash  $($env:INSTALLER_NAME)" | Out-File -FilePath "dist/$($env:INSTALLER_NAME).sha256" -Encoding ascii
+          Write-Host "SHA256: $hash"
+
+      - name: Upload installer as workflow artifact (fallback — always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dentiva-Pro-Setup
+          path: |
+            dist/Dentiva-Pro-Setup-*.exe
+            dist/Dentiva-Pro-Setup-*.exe.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Dentiva-Pro-Setup-*.exe
+            dist/Dentiva-Pro-Setup-*.exe.sha256
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

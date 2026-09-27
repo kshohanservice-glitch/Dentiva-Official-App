@@ -5,6 +5,7 @@
  * (Inter + Noto Sans Bengali) so Bengali shaping is correct on paper and in PDF.
  * A single layout engine serves print and PDF; paper profiles adapt via CSS vars.
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getDb } from '../db/connection';
@@ -24,15 +25,26 @@ export const PAPER_SIZES: Record<PaperProfile, { width: string; height: string; 
 
 /** Directory that holds the bundled woff2 fonts (packaged resources or repo). */
 export function fontsDir(): string {
-  // app.isPackaged -> process.resourcesPath/resources; dev -> repo resources/
+  // Packaged app: electron-builder extraResources → process.resourcesPath/fonts
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { app } = require('electron');
-    if (app.isPackaged) return path.join(process.resourcesPath, 'fonts');
+    if (app?.isPackaged) return path.join(process.resourcesPath, 'fonts');
   } catch {
     /* plain Node (tests) — fall through */
   }
-  return path.join(__dirname, '..', '..', '..', 'resources', 'fonts');
+  // Dev / vitest / bundled main: walk up from __dirname until we find resources/fonts.
+  // Source lives at src/main/print; esbuild emits a single out/main/index.js — both cases
+  // resolve correctly by searching parents rather than assuming a fixed depth.
+  let dir = __dirname;
+  for (let i = 0; i < 6; i++) {
+    const candidate = path.join(dir, 'resources', 'fonts');
+    if (fs.existsSync(path.join(candidate, 'NotoSansBengali-400.woff2'))) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.join(process.cwd(), 'resources', 'fonts');
 }
 
 function fontFace(name: string, file: string, weight: number): string {
