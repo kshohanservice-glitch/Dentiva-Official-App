@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type AppUser, type Role } from '../lib/api';
+import { api, type AppUser, type Role, type StaffRow } from '../lib/api';
 import type { NavCtx } from '../shell/AppShell';
-import { Badge, Button, EmptyState, ErrorState, Field, Input, LoadingRows, Modal, Textarea, useToast } from '../components/ui';
-import { IconPlus, IconKey, IconShield } from '../components/Icons';
+import { Badge, Button, ConfirmDialog, EmptyState, ErrorState, Field, Input, LoadingRows, Modal, Select, Textarea, useToast } from '../components/ui';
+import { IconPlus, IconKey, IconShield, IconEdit, IconTrash } from '../components/Icons';
+import { formatBDT, parseAmountToPaisa } from '../../shared/money';
 
 export function UsersPage({ ctx }: { ctx: NavCtx }) {
-  const [tab, setTab] = useState<'users' | 'roles' | 'logins'>('users');
+  const [tab, setTab] = useState<'users' | 'roles' | 'staff' | 'logins'>('users');
   void ctx;
   return (
     <div className="page">
@@ -13,17 +14,19 @@ export function UsersPage({ ctx }: { ctx: NavCtx }) {
         <div>
           <div className="crumb">Administration</div>
           <h1>Staff & Users</h1>
-          <div className="dp-sub" style={{ marginTop: 2 }}>User accounts, roles and granular permissions</div>
+          <div className="dp-sub" style={{ marginTop: 2 }}>User accounts, roles, permissions and clinic staff records</div>
         </div>
       </div>
       <div className="tabs" role="tablist">
         <button className={`tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>User accounts</button>
         <button className={`tab ${tab === 'roles' ? 'active' : ''}`} onClick={() => setTab('roles')}>Roles & permissions</button>
+        <button className={`tab ${tab === 'staff' ? 'active' : ''}`} onClick={() => setTab('staff')}>Staff records</button>
         <button className={`tab ${tab === 'logins' ? 'active' : ''}`} onClick={() => setTab('logins')}>Login history</button>
       </div>
       <div style={{ marginTop: 16 }}>
         {tab === 'users' && <UsersTab />}
         {tab === 'roles' && <RolesTab />}
+        {tab === 'staff' && <StaffTab />}
         {tab === 'logins' && <LoginHistoryTab />}
       </div>
     </div>
@@ -394,5 +397,193 @@ function LoginHistoryTab() {
         </tbody>
       </table>
     </div>
+  );
+}
+
+// ============================ Staff ============================
+
+function StaffTab() {
+  const [rows, setRows] = useState<StaffRow[] | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
+  const [error, setError] = useState('');
+  const [editor, setEditor] = useState<{ mode: 'create' } | { mode: 'edit'; row: StaffRow } | null>(null);
+  const [deleting, setDeleting] = useState<StaffRow | null>(null);
+  const { toast } = useToast();
+
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      setRows((await api.staffList(showInactive)) as unknown as StaffRow[]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load staff.');
+    }
+  }, [showInactive]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (error) return <div className="card"><ErrorState message={error} onRetry={() => void load()} /></div>;
+  if (!rows) return <div className="card"><LoadingRows /></div>;
+
+  return (
+    <div className="card">
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--dp-divider)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span className="card-title">Staff records ({rows.length})</span>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+            <span>Show inactive</span>
+          </label>
+          <Button size="sm" variant="primary" icon={<IconPlus size={14} />} onClick={() => setEditor({ mode: 'create' })}>Add staff</Button>
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <EmptyState icon={<IconShield size={22} />} title="No staff records" desc="Add clinical and administrative staff. Sensitive fields are masked unless you hold staff.manage." />
+      ) : (
+        <div className="table-wrap" style={{ border: 'none', borderRadius: 0 }}>
+          <table className="table">
+            <thead>
+              <tr><th>Name</th><th>Position</th><th>Department</th><th>Phone</th><th>Joined</th><th className="num">Salary</th><th>Status</th><th style={{ width: 90 }}></th></tr>
+            </thead>
+            <tbody>
+              {rows.map((s) => (
+                <tr key={s.id}>
+                  <td className="cell-main">{s.name}</td>
+                  <td className="cell-sub">{s.position || '—'}</td>
+                  <td className="cell-sub">{s.department || '—'}</td>
+                  <td className="cell-sub">{s.phone || '—'}</td>
+                  <td className="cell-sub">{s.joining_date ? new Date(s.joining_date).toLocaleDateString('en-GB') : '—'}</td>
+                  <td className="num">{s.salary_paisa === null ? <span className="dp-sub">hidden</span> : formatBDT(s.salary_paisa)}</td>
+                  <td>{s.status === 'active' ? <Badge tone="success">Active</Badge> : <Badge tone="neutral">Inactive</Badge>}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <Button size="sm" variant="ghost" icon={<IconEdit size={14} />} onClick={() => setEditor({ mode: 'edit', row: s })} aria-label="Edit staff" />
+                      <Button size="sm" variant="ghost" icon={<IconTrash size={14} />} onClick={() => setDeleting(s)} aria-label="Remove staff" />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {editor && (
+        <StaffEditor
+          existing={editor.mode === 'edit' ? editor.row : null}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            setEditor(null);
+            toast('success', editor.mode === 'create' ? 'Staff added' : 'Staff updated');
+            void load();
+          }}
+        />
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title="Remove staff record?"
+          danger
+          requireText={deleting.name}
+          confirmLabel="Remove staff"
+          message={`This soft-deletes the staff record for ${deleting.name}. Linked historical records keep their references.`}
+          onConfirm={async () => {
+            try {
+              await api.staffDelete(deleting.id);
+              toast('success', 'Staff removed');
+              setDeleting(null);
+              void load();
+            } catch (e) {
+              toast('error', 'Remove failed', e instanceof Error ? e.message : undefined);
+            }
+          }}
+          onClose={() => setDeleting(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function StaffEditor({ existing, onClose, onSaved }: { existing: StaffRow | null; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(existing?.name ?? '');
+  const [position, setPosition] = useState(existing?.position ?? '');
+  const [department, setDepartment] = useState(existing?.department ?? '');
+  const [phone, setPhone] = useState(existing?.phone ?? '');
+  const [gender, setGender] = useState(existing?.gender ?? '');
+  const [bloodGroup, setBloodGroup] = useState(existing?.blood_group ?? '');
+  const [nationalId, setNationalId] = useState(existing?.national_id ?? '');
+  const [address, setAddress] = useState(existing?.address ?? '');
+  const [joiningDate, setJoiningDate] = useState(existing?.joining_date ?? '');
+  const [salary, setSalary] = useState(existing?.salary_paisa ? (existing.salary_paisa / 100).toFixed(2) : '');
+  const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const isEdit = Boolean(existing);
+
+  const submit = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      if (!name.trim()) throw new Error('Staff name is required.');
+      const salaryPaisa = salary.trim() ? parseAmountToPaisa(salary) : 0;
+      if (salaryPaisa === null || salaryPaisa < 0) throw new Error('Salary must be a valid non-negative amount.');
+      const payload = {
+        name: name.trim(),
+        position: position.trim() || undefined,
+        department: department.trim() || undefined,
+        phone: phone.trim() || undefined,
+        gender: gender || undefined,
+        bloodGroup: bloodGroup || undefined,
+        nationalId: nationalId.trim() || undefined,
+        address: address.trim() || undefined,
+        joiningDate: joiningDate || null,
+        salaryPaisa,
+        notes: notes.trim() || undefined,
+      };
+      if (isEdit && existing) await api.staffUpdate(existing.id, payload);
+      else await api.staffCreate(payload);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save staff.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={isEdit ? `Edit — ${existing?.name}` : 'Add staff'}
+      size="lg"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={busy} onClick={() => void submit()}>{isEdit ? 'Save changes' : 'Add staff'}</Button>
+        </>
+      }
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <Field label="Full name" required className="field-full"><Input value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
+        <Field label="Position"><Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="e.g. Dental Hygienist" /></Field>
+        <Field label="Department"><Input value={department} onChange={(e) => setDepartment(e.target.value)} /></Field>
+        <Field label="Phone"><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+        <Field label="Gender">
+          <Select value={gender} onChange={(e) => setGender(e.target.value)}>
+            <option value="">— select —</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+          </Select>
+        </Field>
+        <Field label="Blood group"><Input value={bloodGroup} onChange={(e) => setBloodGroup(e.target.value)} /></Field>
+        <Field label="National ID"><Input value={nationalId} onChange={(e) => setNationalId(e.target.value)} /></Field>
+        <Field label="Joining date"><Input type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} /></Field>
+        <Field label="Monthly salary (৳)" hint="Visible only to users with staff.manage"><Input inputMode="decimal" value={salary} onChange={(e) => setSalary(e.target.value)} placeholder="0.00" /></Field>
+        <Field label="Address" className="field-full"><Input value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
+        <Field label="Notes" className="field-full"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+      </div>
+      {error && <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>}
+    </Modal>
   );
 }
