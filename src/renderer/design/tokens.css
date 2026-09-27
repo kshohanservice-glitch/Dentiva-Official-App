@@ -1,0 +1,122 @@
+/* ============================================================
+   Dentiva Pro Design System — Tokens
+   Premium clinical: calm, precise, information-dense, clean.
+   ============================================================ */
+:root {
+  /* Brand */
+  --dp-primary-50: #ecfeff;
+  --dp-primary-100: #cffafe;
+  --dp-primary-200: #a5f3fc;
+  --dp-primary-300: #67e8f9;
+  --dp-primary-400: #22d3ee;
+  --dp-primary-500: #0891b2;
+  --dp-primary-600: #0e7490;
+  --dp-primary-700: #155e75;
+  --dp-primary-800: #164e63;
+  --dp-primary-900: #0f3a4a;
+
+  /* Surfaces */
+  --dp-bg: #f5f7fa;
+  --dp-surface: #ffffff;
+  --dp-surface-2: #fbfcfe;
+  --dp-surface-sunken: #eef1f5;
+
+  /* Lines */
+  --dp-border: #e2e8f0;
+  --dp-border-strong: #cbd5e1;
+  --dp-divider: #edf1f5;
+
+  /* Text */
+  --dp-text: #0f1c2e;
+  --dp-text-2: #3f5167;
+  --dp-text-3: #64748b;
+  --dp-text-faint: #94a3b8;
+
+  /* Semantic */
+  --dp-success: #15803d;
+  --dp-success-bg: #f0fdf4;
+  --dp-success-border: #bbf7d0;
+  --dp-warning: #b45309;
+  --dp-warning-bg: #fffbeb;
+  --dp-warning-border: #fde68a;
+  --dp-error: #b91c1c;
+  --dp-error-bg: #fef2f2;
+  --dp-error-border: #fecaca;
+  --dp-info: #1d4ed8;
+  --dp-info-bg: #eff6ff;
+  --dp-info-border: #bfdbfe;
+
+  /* Sidebar (dark premium) */
+  --dp-sidebar-bg: #0c1a28;
+  --dp-sidebar-bg-2: #102236;
+  --dp-sidebar-text: #9fb2c8;
+  --dp-sidebar-text-dim: #64809e;
+  --dp-sidebar-active-bg: rgba(8, 145, 178, 0.18);
+  --dp-sidebar-active-text: #7dd3fc;
+  --dp-sidebar-hover: rgba(255, 255, 255, 0.05);
+  --dp-sidebar-group: #55708f;
+
+  /* Typography */
+  --dp-font: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Noto Sans Bengali', sans-serif;
+  --dp-mono: 'JetBrains Mono', 'Consolas', monospace;
+  --dp-fs-11: 11px;
+  --dp-fs-12: 12px;
+  --dp-fs-13: 13px;
+  --dp-fs-14: 14px;
+  --dp-fs-16: 16px;
+  --dp-fs-18: 18px;
+  --dp-fs-20: 20px;
+  --dp-fs-24: 24px;
+  --dp-fs-30: 30px;
+
+  /* Spacing scale (4px base) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* Radii */
+  --rad-sm: 6px;
+  --rad-md: 10px;
+  --rad-lg: 14px;
+  --rad-full: 999px;
+
+  /* Elevation */
+  --shadow-xs: 0 1px 2px rgba(15, 28, 46, 0.05);
+  --shadow-sm: 0 1px 3px rgba(15, 28, 46, 0.08), 0 1px 2px rgba(15, 28, 46, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 28, 46, 0.1), 0 2px 4px rgba(15, 28, 46, 0.05);
+  --shadow-lg: 0 12px 32px rgba(15, 28, 46, 0.16), 0 4px 8px rgba(15, 28, 46, 0.06);
+  --ring: 0 0 0 3px rgba(8, 145, 178, 0.25);
+
+  /* Layout */
+  --topbar-h: 56px;
+  --sidebar-w: 236px;
+  --sidebar-w-collapsed: 64px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.33, 1, 0.68, 1);
+  --dur-fast: 120ms;
+  --dur-med: 180ms;
+}
+
+[data-density='compact'] {
+  --sp-3: 10px;
+  --sp-4: 12px;
+}
+
+[data-animations='off'] * {
+  transition-duration: 0ms !important;
+  animation-duration: 0ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}
