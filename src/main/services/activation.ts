@@ -17,6 +17,19 @@ import { logger } from '../util/logger';
 /** Derived verifier for the shipped activation code (digest only — not the code). */
 const SHIPPED_VERIFIER = '2f362d8cebfd0c7e6bfd9b5df17bdd264af7c1195f93af97986c9b0c60fa41e6';
 
+/**
+ * Optional CI/test-only verifier injected via env (hex digest). Never a production
+ * code — allows E2E to activate against a throwaway test pair without embedding
+ * the real activation code in the repository or workflow files.
+ * Production builds leave this unset; only the SHIPPED_VERIFIER applies.
+ */
+function e2eTestVerifier(): string | null {
+  const v = process.env.DENTIVA_E2E_TEST_VERIFIER?.trim();
+  if (!v) return null;
+  if (!/^[0-9a-f]{64}$/i.test(v)) return null;
+  return v.toLowerCase();
+}
+
 export function isActivated(): boolean {
   const row = getDb().prepare('SELECT activated, verifier_hash FROM activation_state WHERE id = 1').get<{
     activated: number;
@@ -44,8 +57,8 @@ export function activate(code: string): void {
     throw new AppError('ACTIVATION_INVALID', 'The activation code you entered is not valid.');
   }
 
-  // Accept the shipped verifier, or a previously stored one.
-  const candidateVerifiers = [SHIPPED_VERIFIER, row?.verifier_hash].filter(Boolean) as string[];
+  // Accept the shipped verifier, an optional CI test verifier, or a previously stored one.
+  const candidateVerifiers = [SHIPPED_VERIFIER, e2eTestVerifier(), row?.verifier_hash].filter(Boolean) as string[];
   const ok = candidateVerifiers.some((v) => verifyActivationCode(normalized, v));
   if (!ok) {
     audit({ action: 'activation.failed', result: 'failure', details: { reason: 'mismatch' } });

@@ -1,10 +1,16 @@
 /**
  * Flows 1–8: cold boot, activation (valid/invalid), setup wizard, login, lock, logout.
  */
-import { test, expect, e2eRunnable, launchApp, activateApp, completeSetup, login, E2E_ADMIN_USER, E2E_ADMIN_PASSWORD, E2E_ACTIVATION_CODE } from './helpers';
+import { test, expect, e2eRunnable, assertE2eRunnableOrThrow, launchApp, activateApp, completeSetup, login, E2E_ADMIN_USER, E2E_ADMIN_PASSWORD, E2E_ACTIVATION_CODE } from './helpers';
 
 test.describe('Boot · Activation · Setup · Auth (flows 1–8)', () => {
-  test.skip(!e2eRunnable(), 'CI-only: needs Electron + native binding + activation code');
+  test.beforeAll(() => {
+    if (process.env.CI === 'true' || process.env.DENTIVA_E2E_REQUIRE === '1') {
+      assertE2eRunnableOrThrow();
+    } else if (!e2eRunnable()) {
+      test.skip(true, 'Local sandbox: Electron/native/activation not available');
+    }
+  });
 
   test('1 · cold boot shows Activation screen on a fresh userData', async () => {
     const h = await launchApp();

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { freshDb, type TestCtx } from './helpers';
 import { activate, activationStatus, isActivated } from '../../src/main/services/activation';
@@ -87,6 +88,36 @@ describe('activation system', () => {
     for (const f of files) {
       const text = fs.readFileSync(f, 'utf8');
       expect(text.match(/['"`]\d{16}['"`]/)).toBeNull();
+    }
+  });
+});
+
+describe('CI test-only activation verifier (E2E path)', () => {
+  it('accepts a code matching DENTIVA_E2E_TEST_VERIFIER without using the production code', () => {
+    ctx = freshDb();
+    // Generate the same deterministic test pair the CI script uses.
+    const testCode = '0000111122223333';
+    const pepper = Buffer.from('dentiva-pro::v1::activation', 'utf8');
+    const verifier = crypto
+      .scryptSync(testCode, pepper, 32, { N: 4096, r: 8, p: 1, maxmem: 32 * 1024 * 1024 })
+      .toString('hex');
+    process.env.DENTIVA_E2E_TEST_VERIFIER = verifier;
+    try {
+      expect(() => activate(testCode)).not.toThrow();
+      expect(isActivated()).toBe(true);
+    } finally {
+      delete process.env.DENTIVA_E2E_TEST_VERIFIER;
+    }
+  });
+
+  it('still rejects a wrong code even when a test verifier is set', () => {
+    ctx = freshDb();
+    process.env.DENTIVA_E2E_TEST_VERIFIER = 'a'.repeat(64);
+    try {
+      expect(() => activate('9999999999999999')).toThrow();
+      expect(isActivated()).toBe(false);
+    } finally {
+      delete process.env.DENTIVA_E2E_TEST_VERIFIER;
     }
   });
 });

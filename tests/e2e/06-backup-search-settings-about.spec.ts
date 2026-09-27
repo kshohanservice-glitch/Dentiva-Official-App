@@ -1,10 +1,16 @@
 /**
  * Flows 41–47: backup, global search, settings, notifications, about, sidebar collapse, Bengali UI smoke.
  */
-import { test, expect, e2eRunnable, bootToDashboard, goNav } from './helpers';
+import { test, expect, e2eRunnable, assertE2eRunnableOrThrow, bootToDashboard, goNav } from './helpers';
 
 test.describe('Backup · Search · Settings · About (flows 41–47)', () => {
-  test.skip(!e2eRunnable(), 'CI-only');
+  test.beforeAll(() => {
+    if (process.env.CI === 'true' || process.env.DENTIVA_E2E_REQUIRE === '1') {
+      assertE2eRunnableOrThrow();
+    } else if (!e2eRunnable()) {
+      test.skip(true, 'Local sandbox: Electron/native/activation not available');
+    }
+  });
 
   test('41 · backup page loads and create-backup control is present', async () => {
     const h = await bootToDashboard();

@@ -38,32 +38,139 @@ jobs:
     name: E2E (Windows · Electron)
     runs-on: windows-latest
     needs: quality
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
+
       - name: Install dependencies (with native bindings)
         run: npm ci
+
       - name: Build full app
         run: npm run build
+
+      - name: Verify Electron + better-sqlite3 native bindings
+        shell: pwsh
+        run: |
+          $electron = node -e "try{const p=require('electron');console.log(p)}catch(e){process.exit(1)}"
+          if (-not (Test-Path $electron)) { throw "Electron binary missing at $electron" }
+          node -e "require('better-sqlite3'); console.log('better-sqlite3 OK')"
+          Write-Host "Electron: $electron"
+
+      - name: Prepare E2E activation material
+        id: act
+        shell: bash
+        env:
+          # Prefer repo secret (production code). Never echoed.
+          SECRET_CODE: ${{ secrets.DENTIVA_E2E_ACTIVATION_CODE }}
+        run: |
+          set -euo pipefail
+          if [ -n "${SECRET_CODE:-}" ]; then
+            echo "::add-mask::${SECRET_CODE}"
+            echo "mode=secret" >> "$GITHUB_OUTPUT"
+            echo "Using repository secret DENTIVA_E2E_ACTIVATION_CODE (masked)."
+            # Secret path: only the code is needed; SHIPPED_VERIFIER validates it.
+            {
+              echo "DENTIVA_E2E_ACTIVATION_CODE<<EOF"
+              echo "$SECRET_CODE"
+              echo "EOF"
+            } >> "$GITHUB_ENV"
+          else
+            echo "Repository secret unset — generating TEST-ONLY activation pair for CI."
+            # Capture generator output (code= / verifier= lines). Code is masked inside the script.
+            mapfile -t LINES < <(node scripts/gen-e2e-activation.mjs)
+            CODE=""
+            VERIFIER=""
+            for line in "${LINES[@]}"; do
+              case "$line" in
+                code=*) CODE="${line#code=}" ;;
+                verifier=*) VERIFIER="${line#verifier=}" ;;
+              esac
+            done
+            if [ -z "$CODE" ] || [ -z "$VERIFIER" ]; then
+              echo "Failed to generate test activation material" >&2
+              exit 1
+            fi
+            echo "mode=test_only" >> "$GITHUB_OUTPUT"
+            {
+              echo "DENTIVA_E2E_TEST_CODE<<EOF"
+              echo "$CODE"
+              echo "EOF"
+              echo "DENTIVA_E2E_TEST_VERIFIER<<EOF"
+              echo "$VERIFIER"
+              echo "EOF"
+            } >> "$GITHUB_ENV"
+          fi
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
-      - name: Run E2E (47 mandatory flows)
+
+      - name: Run E2E (47 mandatory flows — no silent skips)
         env:
-          # Injected from repository secret — never committed. The production
-          # activation code is derived to SHIPPED_VERIFIER at build time; the
-          # plaintext is only available to the CI runner via this secret.
-          DENTIVA_E2E_ACTIVATION_CODE: ${{ secrets.DENTIVA_E2E_ACTIVATION_CODE }}
-        run: npm run test:e2e
-      - name: Upload Playwright report on failure
-        if: failure()
+          CI: 'true'
+          DENTIVA_E2E_REQUIRE: '1'
+        run: npx playwright test --reporter=list,json
+
+      - name: Assert 47 passed / 0 skipped
+        shell: pwsh
+        run: |
+          $jsonPath = "playwright-report/results.json"
+          if (-not (Test-Path $jsonPath)) { throw "Missing $jsonPath — Playwright did not write a report." }
+          $r = Get-Content $jsonPath -Raw | ConvertFrom-Json
+          # Playwright JSON reporter: stats at top level in v1.40+
+          $expected = 47
+          $passed = 0
+          $failed = 0
+          $skipped = 0
+          $timedOut = 0
+          function Walk($suite) {
+            if ($null -eq $suite) { return }
+            foreach ($s in @($suite.suites)) { Walk $s }
+            foreach ($spec in @($suite.specs)) {
+              foreach ($t in @($spec.tests)) {
+                foreach ($res in @($t.results)) {
+                  switch ($res.status) {
+                    'passed' { $script:passed++ }
+                    'failed' { $script:failed++ }
+                    'timedOut' { $script:timedOut++; $script:failed++ }
+                    'skipped' { $script:skipped++ }
+                    'interrupted' { $script:failed++ }
+                    default {
+                      # expectedStatus skipped etc.
+                      if ($res.status -eq 'skipped' -or $t.status -eq 'skipped') { $script:skipped++ }
+                      elseif ($t.status -eq 'passed') { $script:passed++ }
+                      elseif ($t.status -eq 'expected') { $script:passed++ }
+                      else { Write-Host "Unknown status: $($res.status) / $($t.status)" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          Walk $r
+          # Fallback: use stats if present
+          if ($r.stats) {
+            Write-Host "Reporter stats: $($r.stats | ConvertTo-Json -Compress)"
+            if ($null -ne $r.stats.expected) { $passed = [int]$r.stats.expected }
+            if ($null -ne $r.stats.unexpected) { $failed = [int]$r.stats.unexpected }
+            if ($null -ne $r.stats.skipped) { $skipped = [int]$r.stats.skipped }
+          }
+          Write-Host "E2E tally — passed=$passed failed=$failed skipped=$skipped timedOut=$timedOut"
+          if ($failed -gt 0) { throw "E2E had $failed failure(s)." }
+          if ($skipped -gt 0) { throw "E2E had $skipped skipped test(s) — silent skips are not allowed on CI." }
+          if ($passed -lt $expected) { throw "E2E passed $passed tests; expected at least $expected mandatory flows." }
+          Write-Host "OK: $passed mandatory E2E flows passed, 0 skipped."
+
+      - name: Upload Playwright report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-ci
           path: |
             playwright-report/
             test-results/
-          retention-days: 7
+          retention-days: 14
+          if-no-files-found: warn

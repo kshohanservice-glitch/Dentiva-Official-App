@@ -1,10 +1,16 @@
 /**
  * Flows 35–40: inventory, stock movements, accounting entries, staff records.
  */
-import { test, expect, e2eRunnable, bootToDashboard, goNav } from './helpers';
+import { test, expect, e2eRunnable, assertE2eRunnableOrThrow, bootToDashboard, goNav } from './helpers';
 
 test.describe('Inventory · Accounting · Staff (flows 35–40)', () => {
-  test.skip(!e2eRunnable(), 'CI-only');
+  test.beforeAll(() => {
+    if (process.env.CI === 'true' || process.env.DENTIVA_E2E_REQUIRE === '1') {
+      assertE2eRunnableOrThrow();
+    } else if (!e2eRunnable()) {
+      test.skip(true, 'Local sandbox: Electron/native/activation not available');
+    }
+  });
 
   test('35 · inventory page loads', async () => {
     const h = await bootToDashboard();

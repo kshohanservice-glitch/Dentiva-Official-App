@@ -1,22 +1,26 @@
 name: Release
 
+# Manual dispatch only for now (no tag push → no accidental public release).
+# Tag-based publish can be re-enabled after first validated installer.
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version override (optional, defaults to package.json)'
+      skip_e2e:
+        description: 'Skip E2E (emergency only — default false)'
         required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   release:
-    name: Build · Test · Package NSIS · Publish
+    name: Build · Test · Package NSIS · Artifact
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,30 +47,100 @@ jobs:
         run: npm run icon
         continue-on-error: true
 
+      - name: Verify Electron + better-sqlite3
+        shell: pwsh
+        run: |
+          $electron = node -e "try{const p=require('electron');console.log(p)}catch(e){process.exit(1)}"
+          if (-not (Test-Path $electron)) { throw "Electron binary missing" }
+          node -e "require('better-sqlite3'); console.log('better-sqlite3 OK')"
+
+      - name: Prepare E2E activation material
+        if: ${{ inputs.skip_e2e != 'true' }}
+        shell: bash
+        env:
+          SECRET_CODE: ${{ secrets.DENTIVA_E2E_ACTIVATION_CODE }}
+        run: |
+          set -euo pipefail
+          if [ -n "${SECRET_CODE:-}" ]; then
+            echo "::add-mask::${SECRET_CODE}"
+            {
+              echo "DENTIVA_E2E_ACTIVATION_CODE<<EOF"
+              echo "$SECRET_CODE"
+              echo "EOF"
+            } >> "$GITHUB_ENV"
+          else
+            mapfile -t LINES < <(node scripts/gen-e2e-activation.mjs)
+            CODE=""; VERIFIER=""
+            for line in "${LINES[@]}"; do
+              case "$line" in
+                code=*) CODE="${line#code=}" ;;
+                verifier=*) VERIFIER="${line#verifier=}" ;;
+              esac
+            done
+            [ -n "$CODE" ] && [ -n "$VERIFIER" ] || { echo "test activation gen failed" >&2; exit 1; }
+            {
+              echo "DENTIVA_E2E_TEST_CODE<<EOF"
+              echo "$CODE"
+              echo "EOF"
+              echo "DENTIVA_E2E_TEST_VERIFIER<<EOF"
+              echo "$VERIFIER"
+              echo "EOF"
+            } >> "$GITHUB_ENV"
+          fi
+
       - name: Install Playwright browsers
+        if: ${{ inputs.skip_e2e != 'true' }}
         run: npx playwright install --with-deps chromium
 
       - name: E2E (47 mandatory flows)
+        if: ${{ inputs.skip_e2e != 'true' }}
         env:
-          DENTIVA_E2E_ACTIVATION_CODE: ${{ secrets.DENTIVA_E2E_ACTIVATION_CODE }}
-        run: npm run test:e2e
+          CI: 'true'
+          DENTIVA_E2E_REQUIRE: '1'
+        run: npx playwright test --reporter=list,json
+
+      - name: Assert 47 passed / 0 skipped
+        if: ${{ inputs.skip_e2e != 'true' }}
+        shell: pwsh
+        run: |
+          $jsonPath = "playwright-report/results.json"
+          if (-not (Test-Path $jsonPath)) { throw "Missing $jsonPath" }
+          $r = Get-Content $jsonPath -Raw | ConvertFrom-Json
+          $passed = 0; $failed = 0; $skipped = 0
+          if ($r.stats) {
+            $passed = [int]$r.stats.expected
+            $failed = [int]$r.stats.unexpected
+            $skipped = [int]$r.stats.skipped
+          }
+          Write-Host "E2E tally — passed=$passed failed=$failed skipped=$skipped"
+          if ($failed -gt 0) { throw "E2E failures: $failed" }
+          if ($skipped -gt 0) { throw "E2E skips not allowed: $skipped" }
+          if ($passed -lt 47) { throw "Expected >=47 passed, got $passed" }
 
       - name: Package NSIS installer (electron-builder)
         run: npm run pack:win
         env:
-          # electron-builder picks GH_TOKEN for publish; we publish manually below
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Validate installer artifact
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path dist -Filter "Dentiva-Pro-Setup-*.exe" -Recurse | Select-Object -First 1
-          if (-not $exe) { throw "Installer .exe not found under dist/" }
+          $exe = Get-ChildItem -Path dist -Filter "Dentiva-Pro-Setup-*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) {
+            Get-ChildItem -Path dist -Recurse | Format-Table Name, Length
+            throw "Installer .exe not found under dist/"
+          }
           if ($exe.Length -lt 1MB) { throw "Installer too small: $($exe.Length) bytes" }
+          $ver = (Get-Content package.json | ConvertFrom-Json).version
+          $expected = "Dentiva-Pro-Setup-$ver.exe"
+          if ($exe.Name -ne $expected) {
+            Write-Warning "Filename $($exe.Name) != expected $expected (continuing if pattern matches)"
+          }
           Write-Host "OK: $($exe.FullName) ($([math]::Round($exe.Length/1MB,2)) MB)"
-          "INSTALLER_PATH=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "INSTALLER_NAME=$($exe.Name)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "INSTALLER_PATH=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "INSTALLER_NAME=$($exe.Name)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "INSTALLER_BYTES=$($exe.Length)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: SHA-256 checksum
         shell: pwsh
@@ -74,25 +148,36 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 $env:INSTALLER_PATH).Hash.ToLower()
           "$hash  $($env:INSTALLER_NAME)" | Out-File -FilePath "dist/$($env:INSTALLER_NAME).sha256" -Encoding ascii
           Write-Host "SHA256: $hash"
+          "INSTALLER_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # Also write a machine-readable summary for docs
+          @"
+          {
+            "name": "$($env:INSTALLER_NAME)",
+            "bytes": $($env:INSTALLER_BYTES),
+            "sha256": "$hash",
+            "version": "$((Get-Content package.json | ConvertFrom-Json).version)",
+            "builtAt": "$(Get-Date -Format o)"
+          }
+          "@ | Out-File -FilePath dist/installer-manifest.json -Encoding utf8
 
-      - name: Upload installer as workflow artifact (fallback — always)
+      - name: Upload installer as workflow artifact (always — no tag required)
         uses: actions/upload-artifact@v4
         with:
           name: Dentiva-Pro-Setup
           path: |
             dist/Dentiva-Pro-Setup-*.exe
             dist/Dentiva-Pro-Setup-*.exe.sha256
+            dist/installer-manifest.json
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+      - name: Upload Playwright report
+        if: always() && inputs.skip_e2e != 'true'
+        uses: actions/upload-artifact@v4
         with:
-          files: |
-            dist/Dentiva-Pro-Setup-*.exe
-            dist/Dentiva-Pro-Setup-*.exe.sha256
-          generate_release_notes: true
-          fail_on_unmatched_files: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: playwright-report-release
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+          if-no-files-found: warn

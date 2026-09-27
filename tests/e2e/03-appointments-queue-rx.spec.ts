@@ -1,10 +1,16 @@
 /**
  * Flows 19–26: appointments, queue check-in, prescriptions (multi-medicine, Bengali).
  */
-import { test, expect, e2eRunnable, bootToDashboard, goNav } from './helpers';
+import { test, expect, e2eRunnable, assertE2eRunnableOrThrow, bootToDashboard, goNav } from './helpers';
 
 test.describe('Appointments · Queue · Prescriptions (flows 19–26)', () => {
-  test.skip(!e2eRunnable(), 'CI-only');
+  test.beforeAll(() => {
+    if (process.env.CI === 'true' || process.env.DENTIVA_E2E_REQUIRE === '1') {
+      assertE2eRunnableOrThrow();
+    } else if (!e2eRunnable()) {
+      test.skip(true, 'Local sandbox: Electron/native/activation not available');
+    }
+  });
 
   test('19 · appointments page loads with day agenda', async () => {
     const h = await bootToDashboard();

@@ -15,8 +15,14 @@ import { pathToFileURL } from 'node:url';
 
 export const E2E_ADMIN_USER = 'admin';
 export const E2E_ADMIN_PASSWORD = 'AdminPass!2026';
-/** Production activation code — only used when injected via env on CI. Never committed as a fixture default. */
-export const E2E_ACTIVATION_CODE = process.env.DENTIVA_E2E_ACTIVATION_CODE?.trim() ?? '';
+/**
+ * Activation code for E2E. Prefer the repository secret DENTIVA_E2E_ACTIVATION_CODE
+ * (production code, never committed). Fallback: CI-generated test-only code from
+ * scripts/gen-e2e-activation.mjs — never the production code, never a fixture default
+ * baked into source.
+ */
+export const E2E_ACTIVATION_CODE =
+  process.env.DENTIVA_E2E_ACTIVATION_CODE?.trim() || process.env.DENTIVA_E2E_TEST_CODE?.trim() || '';
 
 export function electronBinaryAvailable(): boolean {
   try {
@@ -41,6 +47,25 @@ export function betterSqliteAvailable(): boolean {
 /** True when the environment can launch the real Electron app end-to-end. */
 export function e2eRunnable(): boolean {
   return electronBinaryAvailable() && betterSqliteAvailable() && Boolean(E2E_ACTIVATION_CODE);
+}
+
+/**
+ * On CI we refuse to silently skip: missing Electron / native binding / activation
+ * material must fail the job so a green check never means "47 tests skipped".
+ */
+export function assertE2eRunnableOrThrow(): void {
+  const missing: string[] = [];
+  if (!electronBinaryAvailable()) missing.push('Electron binary (npm install electron)');
+  if (!betterSqliteAvailable()) missing.push('better-sqlite3 native binding');
+  if (!E2E_ACTIVATION_CODE) {
+    missing.push('DENTIVA_E2E_ACTIVATION_CODE secret or DENTIVA_E2E_TEST_CODE (from gen-e2e-activation.mjs)');
+  }
+  if (missing.length) {
+    throw new Error(
+      `E2E cannot run — missing: ${missing.join('; ')}. ` +
+        'On CI the workflow must generate a test verifier or inject the activation secret.',
+    );
+  }
 }
 
 export interface AppHandle {
@@ -73,15 +98,22 @@ export async function launchApp(opts: { userData?: string } = {}): Promise<AppHa
   const electronPath = require('electron') as string;
   const mainJs = path.join(process.cwd(), 'out', 'main', 'index.js');
 
+  // Forward CI test verifier into the Electron main process so activation
+  // accepts the test-only code without shipping production secrets.
+  const childEnv: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (typeof v === 'string') childEnv[k] = v;
+  }
+  childEnv.DENTIVA_USER_DATA = userData;
+  childEnv.ELECTRON_DISABLE_SECURITY_WARNINGS = '1';
+  if (process.env.DENTIVA_E2E_TEST_VERIFIER) {
+    childEnv.DENTIVA_E2E_TEST_VERIFIER = process.env.DENTIVA_E2E_TEST_VERIFIER;
+  }
+
   const app = await electron.launch({
     executablePath: electronPath,
     args: [mainJs],
-    env: {
-      ...process.env,
-      DENTIVA_USER_DATA: userData,
-      // Keep Electron from opening DevTools / crash reporters during tests.
-      ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
-    },
+    env: childEnv,
   });
 
   const page = await app.firstWindow();
@@ -195,15 +227,22 @@ export async function waitForToast(page: Page, kind?: 'success' | 'error' | 'inf
 }
 
 /**
- * Playwright fixture: skips the whole file when Electron/native bindings aren't
- * available (local sandbox). On CI the binaries are present and tests run.
+ * Playwright fixture.
+ * - Local sandbox without Electron/native bindings: skip (developer machines
+ *   that only run vitest).
+ * - CI (CI=true): never skip — throw if prerequisites are missing so the job fails.
  */
 export const test = base.extend<{ app: AppHandle }>({
   // eslint-disable-next-line no-empty-pattern
   app: async ({}, use, testInfo) => {
     if (!e2eRunnable()) {
-      testInfo.skip(true, 'E2E requires Electron binary + better-sqlite3 native binding + DENTIVA_E2E_ACTIVATION_CODE (CI-only).');
-      // Still need to satisfy the fixture contract.
+      if (process.env.CI === 'true' || process.env.DENTIVA_E2E_REQUIRE === '1') {
+        assertE2eRunnableOrThrow();
+      }
+      testInfo.skip(
+        true,
+        'E2E requires Electron binary + better-sqlite3 native binding + activation code env (CI provides these).',
+      );
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await use(null as any);
       return;

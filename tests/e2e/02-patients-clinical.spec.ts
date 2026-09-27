@@ -1,10 +1,16 @@
 /**
  * Flows 9–18: patients CRUD, Bengali names, detail tabs (visits/chart/treatments/referrals/timeline/attachments).
  */
-import { test, expect, e2eRunnable, bootToDashboard, goNav } from './helpers';
+import { test, expect, e2eRunnable, assertE2eRunnableOrThrow, bootToDashboard, goNav } from './helpers';
 
 test.describe('Patients · Clinical (flows 9–18)', () => {
-  test.skip(!e2eRunnable(), 'CI-only');
+  test.beforeAll(() => {
+    if (process.env.CI === 'true' || process.env.DENTIVA_E2E_REQUIRE === '1') {
+      assertE2eRunnableOrThrow();
+    } else if (!e2eRunnable()) {
+      test.skip(true, 'Local sandbox: Electron/native/activation not available');
+    }
+  });
 
   test('9 · navigate to Patients and open the new-patient dialog', async () => {
     const h = await bootToDashboard();

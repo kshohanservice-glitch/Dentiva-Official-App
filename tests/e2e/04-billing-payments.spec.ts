@@ -1,10 +1,16 @@
 /**
  * Flows 27–34: invoices, payments, overpayment rejection, BDT display, void rules.
  */
-import { test, expect, e2eRunnable, bootToDashboard, goNav } from './helpers';
+import { test, expect, e2eRunnable, assertE2eRunnableOrThrow, bootToDashboard, goNav } from './helpers';
 
 test.describe('Billing · Payments (flows 27–34)', () => {
-  test.skip(!e2eRunnable(), 'CI-only');
+  test.beforeAll(() => {
+    if (process.env.CI === 'true' || process.env.DENTIVA_E2E_REQUIRE === '1') {
+      assertE2eRunnableOrThrow();
+    } else if (!e2eRunnable()) {
+      test.skip(true, 'Local sandbox: Electron/native/activation not available');
+    }
+  });
 
   test('27 · invoices page loads', async () => {
     const h = await bootToDashboard();
