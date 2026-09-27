@@ -1,4 +1,9 @@
 /** Typed client over the preload bridge. Every call returns data or throws ApiError. */
+import type {
+  AccountingReport, AppointmentRow, AttachmentRow, BackupRow, Category, ChartTooth, InvoiceFull, InvoiceRow, InventoryRow, NotificationRow, PaymentsPage, PaymentMethod, PrescriptionFull, PrescriptionRow, QueueRow, SearchHit, StaffRow, TimelineEvent, TreatmentRow, VisitRow,
+} from './types-extra';
+
+export * from './types-extra';
 
 declare global {
   interface Window {
@@ -83,6 +88,118 @@ export const api = {
   auditQuery: (q: unknown) => call<{ total: number; rows: unknown[] }>('audit:query', q),
 
   callDashboard: () => call<Record<string, unknown>>('dashboard:stats'),
+
+  // visits & clinical
+  visitsList: (patientId: number) => call<VisitRow[]>('visits:list', patientId),
+  visitGet: (id: number) => call<VisitRow>('visits:get', id),
+  visitCreate: (input: unknown) => call<{ id: number }>('visits:create', input),
+  visitUpdate: (id: number, input: unknown) => call<boolean>('visits:update', id, input),
+  visitDelete: (id: number) => call<boolean>('visits:delete', id),
+  visitAddNote: (patientId: number, note: string, visitId?: number | null, dentistId?: number | null) =>
+    call<{ id: number }>('visits:add-note', patientId, note, visitId, dentistId),
+  visitNotes: (patientId: number) => call<unknown[]>('visits:notes', patientId),
+
+  // chart
+  chartCurrent: (patientId: number) => call<{ teeth: Record<string, ChartTooth>; rows: unknown[] }>('chart:current', patientId),
+  chartAdd: (input: unknown) => call<{ created: number }>('chart:add', input),
+  chartClearTooth: (patientId: number, tooth: number) => call<boolean>('chart:clear-tooth', patientId, tooth),
+  chartToothHistory: (patientId: number, tooth: number) => call<unknown[]>('chart:tooth-history', patientId, tooth),
+  chartConditions: () => call<string[]>('chart:conditions'),
+
+  timeline: (patientId: number, filter = '') => call<TimelineEvent[]>('timeline:patient', patientId, filter),
+
+  // referrals
+  referralCreate: (input: unknown) => call<{ id: number }>('referrals:create', input),
+  referralsList: (patientId: number) => call<unknown[]>('referrals:list', patientId),
+  referralStatus: (id: number, status: string, outcome?: string) => call<boolean>('referrals:status', id, status, outcome),
+
+  // treatments
+  treatmentsList: (includeInactive = false, term = '') => call<TreatmentRow[]>('treatments:list', includeInactive, term),
+  treatmentCreate: (input: unknown) => call<{ id: number }>('treatments:create', input),
+  treatmentUpdate: (id: number, input: unknown) => call<boolean>('treatments:update', id, input),
+  treatmentCategories: () => call<string[]>('treatments:categories'),
+  treatmentRecord: (input: unknown) => call<{ id: number; pricePaisa: number }>('treatments:record', input),
+  treatmentRecords: (patientId: number) => call<unknown[]>('treatments:records', patientId),
+  treatmentRecordStatus: (id: number, status: string) => call<boolean>('treatments:record-status', id, status),
+
+  // appointments & queue
+  apptCreate: (input: unknown) => call<{ id: number; conflict: boolean }>('appointments:create', input),
+  apptList: (opts: unknown) => call<AppointmentRow[]>('appointments:list', opts),
+  apptAgenda: (date: string, dentistId?: number | null) => call<AppointmentRow[]>('appointments:agenda', date, dentistId),
+  apptStatus: (id: number, status: string) => call<boolean>('appointments:status', id, status),
+  apptReschedule: (id: number, date: string, time: string, dur?: number) => call<{ conflict: boolean }>('appointments:reschedule', id, date, time, dur),
+  apptCancel: (id: number, reason?: string) => call<boolean>('appointments:cancel', id, reason),
+  queueCheckIn: (patientId: number, dentistId?: number | null, apptId?: number | null, priority?: boolean, reason?: string) =>
+    call<{ id: number; queueNo: number }>('queue:check-in', patientId, dentistId, apptId, priority, reason),
+  queueList: (date?: string) => call<QueueRow[]>('queue:list', date),
+  queueStatus: (id: number, status: string) => call<boolean>('queue:status', id, status),
+
+  // prescriptions
+  rxCreate: (input: unknown) => call<{ id: number; rxNo: string }>('prescriptions:create', input),
+  rxList: (opts: unknown) => call<{ total: number; rows: PrescriptionRow[] }>('prescriptions:list', opts),
+  rxGet: (id: number) => call<PrescriptionFull>('prescriptions:get', id),
+  rxVoid: (id: number) => call<boolean>('prescriptions:void', id),
+  medicinesCatalog: (term = '') => call<unknown[]>('medicines:catalog', term),
+  medicineUpsert: (input: unknown) => call<{ id: number }>('medicines:upsert', input),
+
+  // invoices & payments
+  invoiceCreate: (input: unknown) => call<{ id: number; invoiceNo: string; grandTotalPaisa: number }>('invoices:create', input),
+  invoiceList: (opts: unknown) => call<{ total: number; rows: InvoiceRow[] }>('invoices:list', opts),
+  invoiceGet: (id: number) => call<InvoiceFull>('invoices:get', id),
+  invoiceVoid: (id: number, reason: string) => call<boolean>('invoices:void', id, reason),
+  paymentRecord: (input: unknown) => call<{ id: number; receiptNo: string; invoiceStatus: string }>('payments:record', input),
+  paymentsList: (opts: unknown) => call<PaymentsPage>('payments:list', opts),
+  paymentMethods: () => call<PaymentMethod[]>('payments:methods'),
+
+  // inventory
+  inventoryList: (opts: unknown) => call<InventoryRow[]>('inventory:list', opts),
+  inventoryCreate: (input: unknown) => call<{ id: number }>('inventory:create', input),
+  inventoryUpdate: (id: number, input: unknown) => call<boolean>('inventory:update', id, input),
+  inventoryRetire: (id: number) => call<boolean>('inventory:retire', id),
+  inventoryMove: (input: unknown) => call<boolean>('inventory:move', input),
+  inventoryLedger: (itemId: number) => call<unknown[]>('inventory:ledger', itemId),
+  inventoryAlerts: () => call<{ low: unknown[]; out: unknown[]; expiring: unknown[]; expired: unknown[] }>('inventory:alerts'),
+  suppliersList: () => call<unknown[]>('suppliers:list'),
+  supplierUpsert: (input: unknown) => call<{ id: number }>('suppliers:upsert', input),
+
+  // accounting
+  accountingAddIncome: (input: unknown) => call<{ id: number }>('accounting:add-income', input),
+  accountingAddExpense: (input: unknown) => call<{ id: number }>('accounting:add-expense', input),
+  accountingList: (kind: 'income' | 'expense', opts: unknown) => call<{ total: number; rows: unknown[] }>('accounting:list', kind, opts),
+  accountingUpdate: (kind: string, id: number, input: unknown) => call<boolean>('accounting:update', kind, id, input),
+  accountingDelete: (kind: string, id: number) => call<boolean>('accounting:delete', kind, id),
+  accountingCategories: (kind: 'income' | 'expense') => call<Category[]>('accounting:categories', kind),
+  accountingAddCategory: (kind: string, name: string) => call<{ id: number }>('accounting:add-category', kind, name),
+  accountingReport: (range: unknown) => call<AccountingReport>('accounting:report', range),
+
+  // staff
+  staffList: (includeInactive = false) => call<StaffRow[]>('staff:list', includeInactive),
+  staffGet: (id: number) => call<StaffRow>('staff:get', id),
+  staffCreate: (input: unknown) => call<{ id: number }>('staff:create', input),
+  staffUpdate: (id: number, input: unknown) => call<boolean>('staff:update', id, input),
+  staffDelete: (id: number) => call<boolean>('staff:delete', id),
+
+  // attachments
+  attachmentAdd: (opts: unknown) => call<{ id: number; storedName: string }>('attachments:add', opts),
+  attachmentsList: (entityType: string, entityId: number) => call<AttachmentRow[]>('attachments:list', entityType, entityId),
+  attachmentRead: (id: number) => call<{ fileName: string; dataBase64: string; mimeType: string }>('attachments:read', id),
+  attachmentDelete: (id: number) => call<boolean>('attachments:delete', id),
+
+  // notifications
+  notificationsList: (unreadOnly = false) => call<NotificationRow[]>('notifications:list', unreadOnly),
+  notificationsUnread: () => call<number>('notifications:unread'),
+  notificationRead: (id: number) => call<boolean>('notifications:read', id),
+  notificationsReadAll: () => call<boolean>('notifications:read-all'),
+  notificationsRefresh: () => call<number>('notifications:refresh'),
+
+  // search
+  searchGlobal: (term: string) => call<{ hits: SearchHit[]; counts: Record<string, number> }>('search:global', term),
+
+  // backup
+  backupCreate: () => call<{ id: number; filePath: string; sizeBytes: number }>('backup:create'),
+  backupList: () => call<BackupRow[]>('backup:list'),
+  backupRestore: (zipPath: string, confirmation: string) => call<{ restored: string }>('backup:restore', zipPath, confirmation),
+  backupFolder: () => call<string>('backup:folder'),
 };
 
 // --- shared view models --------------------------------------------------------

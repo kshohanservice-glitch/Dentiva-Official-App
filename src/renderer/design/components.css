@@ -299,3 +299,13 @@ input, select, textarea { font-family: inherit; }
 .kbd { font-family: var(--dp-mono); font-size: 11px; background: var(--dp-surface-sunken); border: 1px solid var(--dp-border); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; color: var(--dp-text-2); }
 .muted-link { color: var(--dp-primary-600); cursor: pointer; background: none; border: none; font-size: inherit; padding: 0; }
 .muted-link:hover { text-decoration: underline; }
+
+/* Inline text link (used in tables to navigate to a record) */
+.link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--dp-primary-600); font: inherit; font-weight: 500;
+}
+.link:hover { text-decoration: underline; }
+
+/* Make a field span all grid columns in a modal grid */
+.field-full { grid-column: 1 / -1; }

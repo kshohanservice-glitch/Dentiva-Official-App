@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState } from '../lib/api';
 import { api } from '../lib/api';
-import { useToast, ConfirmDialog } from '../components/ui';
+import { ConfirmDialog } from '../components/ui';
 import {
   IconDashboard, IconUsers, IconCalendar, IconQueue, IconStethoscope, IconPill,
   IconInvoice, IconPayments, IconBox, IconChart, IconShield, IconDatabase,
   IconSettings, IconInfo, IconBell, IconLock, IconLogout, IconSearch, IconSidebar,
-  IconChevronDown, IconUser, IconKey, IconTooth,
+  IconChevronDown, IconUser, IconTooth,
 } from '../components/Icons';
 import { DashboardPage } from '../pages/DashboardPage';
 import { PatientsPage } from '../pages/PatientsPage';
@@ -14,6 +14,17 @@ import { PatientDetailPage } from '../pages/PatientDetailPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { AboutPage } from '../pages/AboutPage';
 import { UsersPage } from '../pages/UsersPage';
+import { AppointmentsPage } from '../pages/AppointmentsPage';
+import { QueuePage } from '../pages/QueuePage';
+import { TreatmentsPage } from '../pages/TreatmentsPage';
+import { PrescriptionsPage } from '../pages/PrescriptionsPage';
+import { InvoicesPage } from '../pages/InvoicesPage';
+import { PaymentsPage } from '../pages/PaymentsPage';
+import { InventoryPage } from '../pages/InventoryPage';
+import { AccountingPage } from '../pages/AccountingPage';
+import { BackupPage } from '../pages/BackupPage';
+import { GlobalSearchPalette } from '../components/GlobalSearchPalette';
+import { NotificationCenter } from '../components/NotificationCenter';
 
 export interface NavCtx {
   navigate: (route: string) => void;
@@ -74,7 +85,9 @@ export function AppShell({ state, onSessionChanged }: { state: AppState; onSessi
   const [collapsed, setCollapsed] = useState(localStorage.getItem('dp.sidebar') === '1');
   const [userMenu, setUserMenu] = useState(false);
   const [askLogout, setAskLogout] = useState(false);
-  const { toast } = useToast();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
   const activityTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const navigate = useCallback((r: string) => {
@@ -82,7 +95,22 @@ export function AppShell({ state, onSessionChanged }: { state: AppState; onSessi
     setRoute(base);
     setParam(p ?? null);
     setUserMenu(false);
+    setSearchOpen(false);
   }, []);
+
+  // Notification badge — refresh periodically and whenever a page renders.
+  useEffect(() => {
+    let live = true;
+    const tick = () => {
+      api.notificationsUnread().then((n) => live && setUnread(n)).catch(() => undefined);
+    };
+    tick();
+    const t = setInterval(tick, 60_000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [route]);
 
   // Activity ping for auto-lock (throttled to once per 30s of real activity)
   useEffect(() => {
@@ -105,12 +133,26 @@ export function AppShell({ state, onSessionChanged }: { state: AppState; onSessi
     };
   }, []);
 
-  // Ctrl+K placeholder focus: global search comes with the search module; lock shortcut Ctrl+L
+  // Cross-component navigation (e.g. from the notification center).
+  useEffect(() => {
+    const onNav = (e: Event) => {
+      const target = (e as CustomEvent<string>).detail;
+      if (typeof target === 'string' && target) navigate(target);
+    };
+    window.addEventListener('dp:navigate', onNav);
+    return () => window.removeEventListener('dp:navigate', onNav);
+  }, [navigate]);
+
+  // Global shortcuts: Ctrl+L locks, Ctrl+K opens the global search palette.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
         e.preventDefault();
         void api.lock();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -179,11 +221,39 @@ export function AppShell({ state, onSessionChanged }: { state: AppState; onSessi
           <span className="clinic-name">{state.clinic?.name || 'Dentiva Pro'}</span>
           <span className="date-chip">{dateStr}</span>
           <div className="spacer" />
-          <button className="topbar-icon-btn" title="Global search (coming to this build phase)" aria-label="Global search" onClick={() => toast('info', 'Global search', 'The global search palette ships with the Search module in this build.')}>
+          <button className="topbar-icon-btn" title="Global search (Ctrl+K)" aria-label="Global search" onClick={() => setSearchOpen(true)}>
             <IconSearch size={18} />
           </button>
-          <button className="topbar-icon-btn" title="Notifications (coming to this build phase)" aria-label="Notifications" onClick={() => toast('info', 'Notifications', 'The notification center ships with the Notifications module in this build.')}>
+          <button
+            className="topbar-icon-btn"
+            title="Notifications"
+            aria-label={unread > 0 ? `Notifications (${unread} unread)` : 'Notifications'}
+            onClick={() => setNotifOpen(true)}
+            style={{ position: 'relative' }}
+          >
             <IconBell size={18} />
+            {unread > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  right: 2,
+                  minWidth: 15,
+                  height: 15,
+                  borderRadius: 8,
+                  background: 'var(--dp-error)',
+                  color: '#fff',
+                  fontSize: 9.5,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 3px',
+                }}
+              >
+                {unread > 99 ? '99+' : unread}
+              </span>
+            )}
           </button>
           <button className="topbar-icon-btn" title="Lock application (Ctrl+L)" aria-label="Lock application" onClick={() => void api.lock()}>
             <IconLock size={18} />
@@ -223,9 +293,15 @@ export function AppShell({ state, onSessionChanged }: { state: AppState; onSessi
           {route === 'settings' && <SettingsPage ctx={ctx} initialTab={param ?? undefined} />}
           {route === 'about' && <AboutPage ctx={ctx} />}
           {route === 'staff-users' && <UsersPage ctx={ctx} />}
-          {!['dashboard', 'patients', 'patient', 'settings', 'about', 'staff-users'].includes(route) && (
-            <ModuleInProgress name={routeLabel(route)} />
-          )}
+          {route === 'appointments' && <AppointmentsPage ctx={ctx} />}
+          {route === 'queue' && <QueuePage ctx={ctx} />}
+          {route === 'treatments' && <TreatmentsPage ctx={ctx} />}
+          {route === 'prescriptions' && <PrescriptionsPage ctx={ctx} />}
+          {route === 'invoices' && <InvoicesPage ctx={ctx} />}
+          {route === 'payments' && <PaymentsPage ctx={ctx} />}
+          {route === 'inventory' && <InventoryPage ctx={ctx} />}
+          {route === 'accounting' && <AccountingPage ctx={ctx} />}
+          {route === 'backup' && <BackupPage ctx={ctx} />}
         </main>
       </div>
 
@@ -241,40 +317,9 @@ export function AppShell({ state, onSessionChanged }: { state: AppState; onSessi
           onClose={() => setAskLogout(false)}
         />
       )}
-    </div>
-  );
-}
 
-function routeLabel(route: string): string {
-  const map: Record<string, string> = {
-    appointments: 'Appointments',
-    queue: 'Queue',
-    treatments: 'Treatments',
-    prescriptions: 'Prescriptions',
-    invoices: 'Invoice',
-    payments: 'Payments',
-    inventory: 'Inventory',
-    accounting: 'Accounting',
-    backup: 'Backup & Restore',
-  };
-  return map[route] ?? route;
-}
-
-function ModuleInProgress({ name }: { name: string }) {
-  return (
-    <div className="page">
-      <div className="card">
-        <div className="state-block">
-          <div className="state-icon">
-            <IconKey size={22} />
-          </div>
-          <div className="state-title">{name}</div>
-          <div className="state-desc">
-            This module is being assembled in the current Dentiva Pro build phase. It will be enabled as its services land
-            in this branch — no mock data is shown anywhere in the product.
-          </div>
-        </div>
-      </div>
+      {searchOpen && <GlobalSearchPalette navigate={navigate} onClose={() => setSearchOpen(false)} />}
+      {notifOpen && <NotificationCenter onClose={() => setNotifOpen(false)} onUnreadChanged={setUnread} />}
     </div>
   );
 }
