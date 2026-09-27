@@ -1,0 +1,37 @@
+appId: com.shohankhan.dentivapro
+productName: Dentiva Pro
+copyright: Copyright © 2026 Shohan Khan. All rights reserved.
+
+directories:
+  buildResources: build
+  output: dist
+
+files:
+  - out/**/*
+  - resources/fonts/**/*
+  - package.json
+  - "!**/*.map"
+
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: Dentiva-Pro-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Dentiva Pro
+  uninstallDisplayName: Dentiva Pro
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+  artifactName: Dentiva-Pro-Setup-${version}.${ext}
+
+publish: null
