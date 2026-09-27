@@ -80,18 +80,13 @@ jobs:
             } >> "$GITHUB_ENV"
           else
             echo "Repository secret unset — generating TEST-ONLY activation pair for CI."
-            # Capture generator output (code= / verifier= lines). Code is masked inside the script.
-            mapfile -t LINES < <(node scripts/gen-e2e-activation.mjs)
-            CODE=""
-            VERIFIER=""
-            for line in "${LINES[@]}"; do
-              case "$line" in
-                code=*) CODE="${line#code=}" ;;
-                verifier=*) VERIFIER="${line#verifier=}" ;;
-              esac
-            done
+            # Generator masks the code via ::add-mask:: and prints code=/verifier= lines.
+            OUT="$(node scripts/gen-e2e-activation.mjs)"
+            CODE="$(printf '%s\n' "$OUT" | sed -n 's/^code=//p' | head -1)"
+            VERIFIER="$(printf '%s\n' "$OUT" | sed -n 's/^verifier=//p' | head -1)"
             if [ -z "$CODE" ] || [ -z "$VERIFIER" ]; then
               echo "Failed to generate test activation material" >&2
+              printf '%s\n' "$OUT" | sed 's/code=.*/code=***/' >&2
               exit 1
             fi
             echo "mode=test_only" >> "$GITHUB_OUTPUT"
@@ -174,3 +169,70 @@ jobs:
             test-results/
           retention-days: 14
           if-no-files-found: warn
+
+  # NSIS installer build — lives on CI so the arena branch can produce a real
+  # .exe without requiring release.yml to exist on default branch main.
+  # Does NOT create a GitHub Release or tag.
+  package-windows:
+    name: Package NSIS installer
+    runs-on: windows-latest
+    needs: [quality, e2e-windows]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app
+        run: npm run build
+
+      - name: Generate Windows icon
+        run: npm run icon
+        continue-on-error: true
+
+      - name: Package NSIS installer (electron-builder)
+        run: npm run pack:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Validate installer + SHA-256
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path dist -Filter "Dentiva-Pro-Setup-*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) {
+            Write-Host "dist/ contents:"
+            Get-ChildItem -Path dist -Recurse -ErrorAction SilentlyContinue | Format-Table FullName, Length
+            throw "Installer .exe not found under dist/"
+          }
+          if ($exe.Length -lt 1MB) { throw "Installer too small: $($exe.Length) bytes" }
+          $ver = (Get-Content package.json | ConvertFrom-Json).version
+          Write-Host "OK: $($exe.Name) size=$($exe.Length) expectedVersion=$ver"
+          $hash = (Get-FileHash -Algorithm SHA256 $exe.FullName).Hash.ToLower()
+          "$hash  $($exe.Name)" | Out-File -FilePath "dist/$($exe.Name).sha256" -Encoding ascii
+          Write-Host "SHA256: $hash"
+          @{
+            name = $exe.Name
+            bytes = $exe.Length
+            sha256 = $hash
+            version = $ver
+            builtAt = (Get-Date -Format o)
+            headSha = $env:GITHUB_SHA
+            runId = $env:GITHUB_RUN_ID
+          } | ConvertTo-Json | Out-File -FilePath dist/installer-manifest.json -Encoding utf8
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dentiva-Pro-Setup
+          path: |
+            dist/Dentiva-Pro-Setup-*.exe
+            dist/Dentiva-Pro-Setup-*.exe.sha256
+            dist/installer-manifest.json
+          if-no-files-found: error
+          retention-days: 30

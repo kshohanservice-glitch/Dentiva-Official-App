@@ -69,14 +69,9 @@ jobs:
               echo "EOF"
             } >> "$GITHUB_ENV"
           else
-            mapfile -t LINES < <(node scripts/gen-e2e-activation.mjs)
-            CODE=""; VERIFIER=""
-            for line in "${LINES[@]}"; do
-              case "$line" in
-                code=*) CODE="${line#code=}" ;;
-                verifier=*) VERIFIER="${line#verifier=}" ;;
-              esac
-            done
+            OUT="$(node scripts/gen-e2e-activation.mjs)"
+            CODE="$(printf '%s\n' "$OUT" | sed -n 's/^code=//p' | head -1)"
+            VERIFIER="$(printf '%s\n' "$OUT" | sed -n 's/^verifier=//p' | head -1)"
             [ -n "$CODE" ] && [ -n "$VERIFIER" ] || { echo "test activation gen failed" >&2; exit 1; }
             {
               echo "DENTIVA_E2E_TEST_CODE<<EOF"
