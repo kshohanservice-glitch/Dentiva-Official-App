@@ -3,7 +3,7 @@ import { api, type Dentist, type PatientRow } from '../lib/api';
 import type { NavCtx } from '../shell/AppShell';
 import { Badge, Button, EmptyState, ErrorState, Field, Input, LoadingRows, Modal, Pagination, SearchInput, Select, useToast } from '../components/ui';
 import { PatientPicker } from '../components/PatientPicker';
-import { IconPill, IconPlus, IconEye, IconTrash } from '../components/Icons';
+import { IconPill, IconPlus, IconEye, IconTrash, IconPrinter } from '../components/Icons';
 
 interface RxListItem {
   id: number;
@@ -390,7 +390,33 @@ function PrescriptionView({ id, onClose, onChanged }: { id: number; onClose: () 
   const [rx, setRx] = useState<RxFull | null>(null);
   const [error, setError] = useState('');
   const [askVoid, setAskVoid] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [savingPdf, setSavingPdf] = useState(false);
   const { toast } = useToast();
+
+  const printRx = async () => {
+    setPrinting(true);
+    try {
+      await api.printPrescription(id);
+      toast('success', 'Sent to printer');
+    } catch (e) {
+      toast('error', 'Print failed', e instanceof Error ? e.message : undefined);
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const pdfRx = async () => {
+    setSavingPdf(true);
+    try {
+      const saved = await api.pdfPrescription(id, `prescription-${rx?.rx_no ?? id}.pdf`);
+      if (saved) toast('success', 'PDF saved', saved);
+    } catch (e) {
+      toast('error', 'PDF export failed', e instanceof Error ? e.message : undefined);
+    } finally {
+      setSavingPdf(false);
+    }
+  };
 
   useEffect(() => {
     api
@@ -410,9 +436,11 @@ function PrescriptionView({ id, onClose, onChanged }: { id: number; onClose: () 
       size="lg"
       onClose={onClose}
       footer={
-        rx && rx.status === 'active' ? (
+        rx ? (
           <>
-            <Button variant="danger-outline" onClick={() => setAskVoid(true)}>Void prescription</Button>
+            <Button variant="secondary" icon={<IconPrinter size={14} />} loading={printing} onClick={() => void printRx()}>Print</Button>
+            <Button variant="secondary" loading={savingPdf} onClick={() => void pdfRx()}>Save PDF</Button>
+            {rx.status === 'active' && <Button variant="danger-outline" onClick={() => setAskVoid(true)}>Void prescription</Button>}
             <Button variant="ghost" onClick={onClose}>Close</Button>
           </>
         ) : undefined

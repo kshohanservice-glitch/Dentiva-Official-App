@@ -3,7 +3,7 @@ import { api, type InvoiceRow, type PatientRow, type PaymentMethod, type Treatme
 import type { NavCtx } from '../shell/AppShell';
 import { Badge, Button, EmptyState, ErrorState, Field, Input, LoadingRows, Modal, Pagination, SearchInput, Select, Textarea, useToast } from '../components/ui';
 import { PatientPicker } from '../components/PatientPicker';
-import { IconInvoice, IconPlus, IconTrash, IconEye } from '../components/Icons';
+import { IconInvoice, IconPlus, IconTrash, IconEye, IconPrinter } from '../components/Icons';
 import { formatBDT, parseAmountToPaisa } from '../../shared/money';
 
 const STATUS: Record<string, { tone: 'success' | 'warning' | 'error' | 'info' | 'neutral'; label: string }> = {
@@ -325,7 +325,33 @@ function InvoiceDetail({ id, onClose, onChanged }: { id: number; onClose: () => 
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [payOpen, setPayOpen] = useState(false);
   const [voidOpen, setVoidOpen] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [savingPdf, setSavingPdf] = useState(false);
   const { toast } = useToast();
+
+  const printInv = async () => {
+    setPrinting(true);
+    try {
+      await api.printInvoice(id);
+      toast('success', 'Invoice sent to printer');
+    } catch (e) {
+      toast('error', 'Print failed', e instanceof Error ? e.message : undefined);
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const pdfInv = async () => {
+    setSavingPdf(true);
+    try {
+      const saved = await api.pdfInvoice(id, `invoice-${inv?.invoice_no ?? id}.pdf`);
+      if (saved) toast('success', 'PDF saved', saved);
+    } catch (e) {
+      toast('error', 'PDF export failed', e instanceof Error ? e.message : undefined);
+    } finally {
+      setSavingPdf(false);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -349,13 +375,15 @@ function InvoiceDetail({ id, onClose, onChanged }: { id: number; onClose: () => 
       size="lg"
       onClose={onClose}
       footer={
-        inv && inv.status !== 'void' ? (
+        inv ? (
           <>
             <div className="dp-sub" style={{ marginRight: 'auto' }}>
               Outstanding: <strong style={{ color: outstanding > 0 ? 'var(--dp-error)' : 'var(--dp-success)' }}>{formatBDT(outstanding)}</strong>
             </div>
-            <Button variant="danger-outline" onClick={() => setVoidOpen(true)} disabled={inv.paid_paisa > 0}>Void invoice</Button>
-            {outstanding > 0 && <Button variant="primary" onClick={() => setPayOpen(true)}>Record payment</Button>}
+            <Button variant="secondary" icon={<IconPrinter size={14} />} loading={printing} onClick={() => void printInv()}>Print</Button>
+            <Button variant="secondary" loading={savingPdf} onClick={() => void pdfInv()}>PDF</Button>
+            {inv.status !== 'void' && <Button variant="danger-outline" onClick={() => setVoidOpen(true)} disabled={inv.paid_paisa > 0}>Void</Button>}
+            {inv.status !== 'void' && outstanding > 0 && <Button variant="primary" onClick={() => setPayOpen(true)}>Record payment</Button>}
           </>
         ) : undefined
       }
@@ -413,7 +441,7 @@ function InvoiceDetail({ id, onClose, onChanged }: { id: number; onClose: () => 
               <span className="card-title">Payments</span>
               <div className="table-wrap" style={{ marginTop: 8 }}>
                 <table className="table">
-                  <thead><tr><th>Receipt</th><th>Method</th><th className="num">Amount</th><th>Date</th></tr></thead>
+                  <thead><tr><th>Receipt</th><th>Method</th><th className="num">Amount</th><th>Date</th><th style={{ width: 70 }}></th></tr></thead>
                   <tbody>
                     {inv.payments.map((p) => (
                       <tr key={p.id}>
@@ -421,6 +449,23 @@ function InvoiceDetail({ id, onClose, onChanged }: { id: number; onClose: () => 
                         <td>{p.method_name}</td>
                         <td className="num" style={{ color: 'var(--dp-success)', fontWeight: 600 }}>{formatBDT(p.amount_paisa)}</td>
                         <td>{new Date(p.paid_at).toLocaleString('en-GB')}</td>
+                        <td>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<IconPrinter size={14} />}
+                            title="Print receipt"
+                            aria-label={`Print receipt ${p.receipt_no}`}
+                            onClick={async () => {
+                              try {
+                                await api.printReceipt(p.id);
+                                toast('success', 'Receipt sent to printer');
+                              } catch (e) {
+                                toast('error', 'Print failed', e instanceof Error ? e.message : undefined);
+                              }
+                            }}
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -25,6 +25,10 @@ export const PERMISSIONS = [
   'prescriptions.create',
   'prescriptions.print',
 
+  // Printing / documents
+  'invoices.print',
+  'reports.print',
+
   // Appointments / queue
   'appointments.view',
   'appointments.manage',
@@ -113,6 +117,7 @@ export const ROLE_DEFAULTS: Record<BuiltinRole, readonly Permission[]> = {
     'queue.manage',
     'invoices.view',
     'invoices.create',
+    'invoices.print',
     'payments.view',
     'payments.record',
     'inventory.view',
@@ -125,6 +130,7 @@ export const ROLE_DEFAULTS: Record<BuiltinRole, readonly Permission[]> = {
     'invoices.view',
     'invoices.create',
     'invoices.edit',
+    'invoices.print',
     'payments.view',
     'payments.record',
     'financial.view',
@@ -135,6 +141,7 @@ export const ROLE_DEFAULTS: Record<BuiltinRole, readonly Permission[]> = {
     'income.create',
     'income.edit',
     'reports.view',
+    'reports.print',
     'search.use',
     'notifications.view',
   ],

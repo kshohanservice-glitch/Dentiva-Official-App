@@ -2,6 +2,65 @@
    Dentiva Pro Design System — Tokens
    Premium clinical: calm, precise, information-dense, clean.
    ============================================================ */
+
+/* Bundled fonts — offline-first, full Bengali coverage (Noto Sans Bengali). */
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/Inter-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/Inter-500.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/Inter-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/Inter-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Sans Bengali';
+  src: url('../assets/fonts/NotoSansBengali-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Sans Bengali';
+  src: url('../assets/fonts/NotoSansBengali-500.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Sans Bengali';
+  src: url('../assets/fonts/NotoSansBengali-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Sans Bengali';
+  src: url('../assets/fonts/NotoSansBengali-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* Brand */
   --dp-primary-50: #ecfeff;

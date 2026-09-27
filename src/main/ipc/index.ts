@@ -34,6 +34,8 @@ import * as attachmentsSvc from '../services/attachments';
 import * as notificationsSvc from '../services/notifications';
 import * as searchSvc from '../services/search';
 import * as backupSvc from '../services/backup';
+import * as printSvc from '../print/service';
+import type { PaperProfile } from '../print/templates';
 import { logger } from '../util/logger';
 import { APP_VERSION, APP_BUILD } from '../version';
 
@@ -439,6 +441,26 @@ register('notifications:refresh', () => {
 register('search:global', (term: unknown) => searchSvc.globalSearch(String(term ?? '')));
 
 // --- backup & restore ---------------------------------------------------------------------------------
+
+// --- printing & PDF ----------------------------------------------------------------
+
+register('print:printers', () => printSvc.listPrinters());
+register('print:prescription', (id: unknown, opts: unknown, paper: unknown) =>
+  printSvc.printPrescription(Number(id), (opts ?? {}) as printSvc.PrintOptions, (paper as PaperProfile) ?? 'a4'),
+);
+register('print:invoice', (id: unknown, opts: unknown, paper: unknown) =>
+  printSvc.printInvoice(Number(id), (opts ?? {}) as printSvc.PrintOptions, (paper as PaperProfile) ?? 'a4'),
+);
+register('print:receipt', (id: unknown, opts: unknown, paper: unknown) =>
+  printSvc.printReceipt(Number(id), (opts ?? {}) as printSvc.PrintOptions, (paper as PaperProfile) ?? 'thermal80'),
+);
+register('print:report', (from: unknown, to: unknown, opts: unknown, paper: unknown) =>
+  printSvc.printAccountingReport(String(from), String(to), (opts ?? {}) as printSvc.PrintOptions, (paper as PaperProfile) ?? 'a4'),
+);
+register('pdf:prescription', (id: unknown, name: unknown) => printSvc.savePrescriptionPdf(Number(id), String(name)));
+register('pdf:invoice', (id: unknown, name: unknown) => printSvc.saveInvoicePdf(Number(id), String(name)));
+register('pdf:receipt', (id: unknown, name: unknown) => printSvc.saveReceiptPdf(Number(id), String(name)));
+register('pdf:report', (from: unknown, to: unknown, name: unknown) => printSvc.saveAccountingReportPdf(String(from), String(to), String(name)));
 
 register('backup:create', () => backupSvc.createBackup('manual'));
 register('backup:list', () => backupSvc.listBackups());

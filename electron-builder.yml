@@ -8,9 +8,16 @@ directories:
 
 files:
   - out/**/*
-  - resources/fonts/**/*
   - package.json
   - "!**/*.map"
+
+# Fonts must live outside the asar so the print pipeline's file:// HTML can
+# load them via pathToFileURL (Bengali shaping depends on these woff2 files).
+extraResources:
+  - from: resources/fonts
+    to: fonts
+    filter:
+      - "**/*"
 
 asar: true
 

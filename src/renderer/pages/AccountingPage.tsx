@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type AccountingReport, type AccountingEntryRow, type Category, type PaymentMethod } from '../lib/api';
 import type { NavCtx } from '../shell/AppShell';
 import { Badge, Button, EmptyState, ErrorState, Field, Input, LoadingRows, Modal, Pagination, Select, useToast } from '../components/ui';
-import { IconChart, IconPlus } from '../components/Icons';
+import { IconChart, IconPlus, IconPrinter } from '../components/Icons';
 import { formatBDT, parseAmountToPaisa } from '../../shared/money';
 
 function todayIso(): string {
@@ -252,6 +252,9 @@ function ReportPanel() {
   const [report, setReport] = useState<AccountingReport | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [savingPdf, setSavingPdf] = useState(false);
+  const { toast } = useToast();
 
   const run = useCallback(async () => {
     setLoading(true);
@@ -276,6 +279,43 @@ function ReportPanel() {
         <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
         <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
         <Button variant="secondary" onClick={() => void run()} style={{ alignSelf: 'flex-end' }}>Refresh</Button>
+        <Button
+          variant="secondary"
+          icon={<IconPrinter size={14} />}
+          loading={printing}
+          style={{ alignSelf: 'flex-end' }}
+          onClick={async () => {
+            setPrinting(true);
+            try {
+              await api.printReport(from, to);
+              toast('success', 'Report sent to printer');
+            } catch (e) {
+              toast('error', 'Print failed', e instanceof Error ? e.message : undefined);
+            } finally {
+              setPrinting(false);
+            }
+          }}
+        >
+          Print report
+        </Button>
+        <Button
+          variant="secondary"
+          loading={savingPdf}
+          style={{ alignSelf: 'flex-end' }}
+          onClick={async () => {
+            setSavingPdf(true);
+            try {
+              const saved = await api.pdfReport(from, to, `accounting-report-${from}-${to}.pdf`);
+              if (saved) toast('success', 'PDF saved', saved);
+            } catch (e) {
+              toast('error', 'PDF export failed', e instanceof Error ? e.message : undefined);
+            } finally {
+              setSavingPdf(false);
+            }
+          }}
+        >
+          Save PDF
+        </Button>
       </div>
 
       {error ? (

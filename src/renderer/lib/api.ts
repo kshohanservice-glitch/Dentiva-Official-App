@@ -200,7 +200,24 @@ export const api = {
   backupList: () => call<BackupRow[]>('backup:list'),
   backupRestore: (zipPath: string, confirmation: string) => call<{ restored: string }>('backup:restore', zipPath, confirmation),
   backupFolder: () => call<string>('backup:folder'),
+
+  // printing & PDF
+  printers: () => call<Array<{ name: string; isDefault: boolean }>>('print:printers'),
+  printPrescription: (id: number, opts?: PrintOpts, paper?: string) => call<boolean>('print:prescription', id, opts ?? {}, paper ?? 'a4'),
+  printInvoice: (id: number, opts?: PrintOpts, paper?: string) => call<boolean>('print:invoice', id, opts ?? {}, paper ?? 'a4'),
+  printReceipt: (paymentId: number, opts?: PrintOpts, paper?: string) => call<boolean>('print:receipt', paymentId, opts ?? {}, paper ?? 'thermal80'),
+  printReport: (from: string, to: string, opts?: PrintOpts) => call<boolean>('print:report', from, to, opts ?? {}, 'a4'),
+  pdfPrescription: (id: number, defaultName: string) => call<string | null>('pdf:prescription', id, defaultName),
+  pdfInvoice: (id: number, defaultName: string) => call<string | null>('pdf:invoice', id, defaultName),
+  pdfReceipt: (paymentId: number, defaultName: string) => call<string | null>('pdf:receipt', paymentId, defaultName),
+  pdfReport: (from: string, to: string, defaultName: string) => call<string | null>('pdf:report', from, to, defaultName),
 };
+
+export interface PrintOpts {
+  silent?: boolean;
+  printerName?: string;
+  copies?: number;
+}
 
 // --- shared view models --------------------------------------------------------
 
