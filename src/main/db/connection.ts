@@ -6,10 +6,16 @@ import { openDatabase, type DatabaseHandle, type SqlValue } from './driver';
 import { logger } from '../util/logger';
 
 let db: DatabaseHandle | null = null;
+let currentDbPath = '';
 
 export function getDb(): DatabaseHandle {
   if (!db) throw new Error('Database not initialized. Call initDatabase() first.');
   return db;
+}
+
+/** Path of the currently-open database file. */
+export function dbFile(): string {
+  return currentDbPath;
 }
 
 export function hasDb(): boolean {
@@ -18,6 +24,7 @@ export function hasDb(): boolean {
 
 export function initDatabase(filePath: string): DatabaseHandle {
   if (db) return db;
+  currentDbPath = filePath;
   db = openDatabase(filePath);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA foreign_keys = ON;');
@@ -38,6 +45,12 @@ export function closeDatabase(): void {
     db.close();
     db = null;
   }
+}
+
+/** Test hook: allow re-initialization after close. */
+export function resetForTests(): void {
+  db = null;
+  currentDbPath = '';
 }
 
 /** Run fn inside an IMMEDIATE transaction. Rolls back on any error. */

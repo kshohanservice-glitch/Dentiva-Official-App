@@ -9,6 +9,7 @@ import path from 'node:path';
 import { initDatabase, closeDatabase, getDb } from '../../src/main/db/connection';
 import { completeSetup, type SetupInput } from '../../src/main/services/setup';
 import { sessionManager } from '../../src/main/services/session';
+import { initPaths } from '../../src/main/util/paths';
 
 export interface TestCtx {
   dir: string;
@@ -17,7 +18,9 @@ export interface TestCtx {
 
 export function freshDb(): TestCtx {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dentiva-test-'));
-  initDatabase(path.join(dir, 'dentiva.db'));
+  initPaths(dir); // redirect data/, attachments/, branding/, logs/ into the temp dir
+  fs.mkdirSync(path.join(dir, 'data'), { recursive: true });
+  initDatabase(path.join(dir, 'data', 'dentiva.db'));
   return {
     dir,
     cleanup: () => {

@@ -11,6 +11,9 @@ import { initPaths, dbFile, logsDir, dataDir, attachmentsDir, brandingDir, tempD
 import { initDatabase, closeDatabase, integrityCheck } from './db/connection';
 import { registerIpcHandlers } from './ipc';
 import { sessionManager } from './services/session';
+import { runAutoBackupIfDue } from './services/backup';
+import { refreshAlertNotifications } from './services/notifications';
+import { isSetupCompleted } from './services/setup';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -42,8 +45,18 @@ if (!gotLock) {
     registerIpcHandlers();
     sessionManager.setListeners({
       onLock: () => mainWindow?.webContents.send('app:locked'),
-      onSessionChange: () => mainWindow?.webContents.send('app:session-changed'),
+      onSessionChange: () => {
+        mainWindow?.webContents.send('app:session-changed');
+        if (!sessionManager.isLocked() && sessionManager.hasSession() && isSetupCompleted()) {
+          refreshAlertNotifications();
+        }
+      },
     });
+
+    // Background housekeeping: due auto-backups + notification refresh (best-effort).
+    if (isSetupCompleted()) {
+      void runAutoBackupIfDue().catch((err) => logger.error('autobackup.startup_failed', { message: String(err) }));
+    }
 
     createMainWindow();
 

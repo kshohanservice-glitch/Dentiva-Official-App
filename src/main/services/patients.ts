@@ -171,7 +171,7 @@ export function getPatient(id: number) {
   const rxCount = db.prepare('SELECT COUNT(*) AS c FROM prescriptions WHERE patient_id = ? AND deleted_at IS NULL').get<{ c: number }>(id)?.c ?? 0;
   const txCount = db.prepare('SELECT COUNT(*) AS c FROM treatment_records WHERE patient_id = ?').get<{ c: number }>(id)?.c ?? 0;
 
-  return {
+  const result: Record<string, unknown> & { summary: Record<string, unknown> } = {
     ...p,
     summary: {
       totalVisits: visits,
@@ -184,6 +184,7 @@ export function getPatient(id: number) {
       treatments: txCount,
     },
   };
+  return result;
 }
 
 export function updatePatient(id: number, input: Partial<PatientInput>): void {

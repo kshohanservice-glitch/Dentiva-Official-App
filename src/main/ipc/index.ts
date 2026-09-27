@@ -19,6 +19,21 @@ import {
 import { listDentists, createDentist, updateDentist, softDeleteDentist } from '../services/dentists';
 import { queryAuditLogs } from '../services/audit';
 import { dashboardStats } from '../services/dashboard';
+import * as visitsSvc from '../services/visits';
+import * as chartSvc from '../services/chart';
+import * as timelineSvc from '../services/timeline';
+import * as referralsSvc from '../services/referrals';
+import * as treatmentsSvc from '../services/treatments';
+import * as apptSvc from '../services/appointments';
+import * as rxSvc from '../services/prescriptions';
+import * as billingSvc from '../services/invoices';
+import * as inventorySvc from '../services/inventory';
+import * as accountingSvc from '../services/accounting';
+import * as staffSvc from '../services/staff';
+import * as attachmentsSvc from '../services/attachments';
+import * as notificationsSvc from '../services/notifications';
+import * as searchSvc from '../services/search';
+import * as backupSvc from '../services/backup';
 import { logger } from '../util/logger';
 import { APP_VERSION, APP_BUILD } from '../version';
 
@@ -221,6 +236,216 @@ register('audit:query', (q: unknown) => {
   return queryAuditLogs(q as never);
 });
 
+// --- visits & clinical -------------------------------------------------------------
+
+register('visits:list', (patientId: unknown) => visitsSvc.listVisits(Number(patientId)));
+register('visits:get', (id: unknown) => visitsSvc.getVisit(Number(id)));
+register('visits:create', (input: unknown) => visitsSvc.createVisit(input as never));
+register('visits:update', (id: unknown, input: unknown) => {
+  visitsSvc.updateVisit(Number(id), input as never);
+  return true;
+});
+register('visits:delete', (id: unknown) => {
+  visitsSvc.softDeleteVisit(Number(id));
+  return true;
+});
+register('visits:add-note', (patientId: unknown, note: unknown, visitId: unknown, dentistId: unknown) =>
+  visitsSvc.addClinicalNote(Number(patientId), String(note), (visitId as number | null) ?? null, (dentistId as number | null) ?? null),
+);
+register('visits:notes', (patientId: unknown) => visitsSvc.listClinicalNotes(Number(patientId)));
+
+// --- dental chart ------------------------------------------------------------------
+
+register('chart:current', (patientId: unknown) => chartSvc.currentChart(Number(patientId)));
+register('chart:add', (input: unknown) => chartSvc.addChartEntries(input as never));
+register('chart:clear-tooth', (patientId: unknown, tooth: unknown) => {
+  chartSvc.clearTooth(Number(patientId), Number(tooth));
+  return true;
+});
+register('chart:tooth-history', (patientId: unknown, tooth: unknown) => chartSvc.toothHistory(Number(patientId), Number(tooth)));
+register('chart:conditions', () => chartSvc.CHART_CONDITIONS);
+
+// --- timeline ----------------------------------------------------------------------
+
+register('timeline:patient', (patientId: unknown, filter: unknown) => timelineSvc.patientTimeline(Number(patientId), String(filter ?? '')));
+
+// --- referrals ---------------------------------------------------------------------
+
+register('referrals:create', (input: unknown) => referralsSvc.createReferral(input as never));
+register('referrals:list', (patientId: unknown) => referralsSvc.listReferrals(Number(patientId)));
+register('referrals:status', (id: unknown, status: unknown, outcome: unknown) => {
+  referralsSvc.updateReferralStatus(Number(id), status as never, outcome as string | undefined);
+  return true;
+});
+
+// --- treatments --------------------------------------------------------------------
+
+register('treatments:list', (includeInactive: unknown, term: unknown) => treatmentsSvc.listTreatments(includeInactive === true, String(term ?? '')));
+register('treatments:create', (input: unknown) => treatmentsSvc.createTreatment(input as never));
+register('treatments:update', (id: unknown, input: unknown) => {
+  treatmentsSvc.updateTreatment(Number(id), input as never);
+  return true;
+});
+register('treatments:categories', () => treatmentsSvc.listCategories());
+register('treatments:record', (input: unknown) => treatmentsSvc.recordTreatment(input as never));
+register('treatments:records', (patientId: unknown) => treatmentsSvc.listTreatmentRecords(Number(patientId)));
+register('treatments:record-status', (id: unknown, status: unknown) => {
+  treatmentsSvc.updateTreatmentRecordStatus(Number(id), status as never);
+  return true;
+});
+
+// --- appointments & queue -------------------------------------------------------------
+
+register('appointments:create', (input: unknown) => apptSvc.createAppointment(input as never));
+register('appointments:list', (opts: unknown) => apptSvc.listAppointments(opts as never));
+register('appointments:agenda', (date: unknown, dentistId: unknown) => apptSvc.appointmentAgenda(String(date), (dentistId as number | null) ?? null));
+register('appointments:status', (id: unknown, status: unknown) => {
+  apptSvc.setAppointmentStatus(Number(id), status as Parameters<typeof apptSvc.setAppointmentStatus>[1]);
+  return true;
+});
+register('appointments:reschedule', (id: unknown, date: unknown, time: unknown, dur: unknown) =>
+  apptSvc.rescheduleAppointment(Number(id), String(date), String(time), dur === undefined ? undefined : Number(dur)),
+);
+register('appointments:cancel', (id: unknown, reason: unknown) => {
+  apptSvc.cancelAppointment(Number(id), reason as string | undefined);
+  return true;
+});
+register('appointments:month-counts', (year: unknown, month: unknown, dentistId: unknown) =>
+  apptSvc.monthGridCounts(Number(year), Number(month), (dentistId as number | null) ?? null),
+);
+register('queue:check-in', (patientId: unknown, dentistId: unknown, apptId: unknown, priority: unknown, reason: unknown) =>
+  apptSvc.checkIn(Number(patientId), (dentistId as number | null) ?? null, (apptId as number | null) ?? null, priority === true, String(reason ?? '')),
+);
+register('queue:list', (date: unknown) => apptSvc.queueList(date === undefined ? undefined : String(date)));
+register('queue:status', (id: unknown, status: unknown) => {
+  apptSvc.queueSetStatus(Number(id), status as never);
+  return true;
+});
+register('queue:reorder', (id: unknown, pos: unknown) => {
+  apptSvc.queueReorder(Number(id), Number(pos));
+  return true;
+});
+
+// --- prescriptions --------------------------------------------------------------------
+
+register('prescriptions:create', (input: unknown) => rxSvc.createPrescription(input as never));
+register('prescriptions:list', (opts: unknown) => rxSvc.listPrescriptions(opts as never));
+register('prescriptions:get', (id: unknown) => rxSvc.getPrescription(Number(id)));
+register('prescriptions:void', (id: unknown) => {
+  rxSvc.voidPrescription(Number(id));
+  return true;
+});
+register('medicines:catalog', (term: unknown) => rxSvc.medicineCatalog(String(term ?? '')));
+register('medicines:upsert', (input: unknown) => rxSvc.upsertMedicine(input as never));
+
+// --- invoices & payments -----------------------------------------------------------------
+
+register('invoices:create', (input: unknown) => billingSvc.createInvoice(input as never));
+register('invoices:list', (opts: unknown) => billingSvc.listInvoices(opts as never));
+register('invoices:get', (id: unknown) => billingSvc.getInvoice(Number(id)));
+register('invoices:edit', (id: unknown, input: unknown) => {
+  billingSvc.editInvoice(Number(id), input as never);
+  return true;
+});
+register('invoices:void', (id: unknown, reason: unknown) => {
+  billingSvc.voidInvoice(Number(id), String(reason));
+  return true;
+});
+register('payments:record', (input: unknown) => billingSvc.recordPayment(input as never));
+register('payments:list', (opts: unknown) => billingSvc.listPayments(opts as never));
+register('payments:methods', () => billingSvc.listPaymentMethods());
+
+// --- inventory ------------------------------------------------------------------------------
+
+register('inventory:list', (opts: unknown) => inventorySvc.listInventory(opts as never));
+register('inventory:create', (input: unknown) => inventorySvc.createInventoryItem(input as never));
+register('inventory:update', (id: unknown, input: unknown) => {
+  inventorySvc.updateInventoryItem(Number(id), input as never);
+  return true;
+});
+register('inventory:retire', (id: unknown) => {
+  inventorySvc.retireInventoryItem(Number(id));
+  return true;
+});
+register('inventory:move', (input: unknown) => {
+  inventorySvc.stockMovement(input as never);
+  return true;
+});
+register('inventory:ledger', (itemId: unknown) => inventorySvc.stockLedger(Number(itemId)));
+register('inventory:alerts', () => inventorySvc.inventoryAlerts());
+register('suppliers:list', () => inventorySvc.listSuppliers());
+register('suppliers:upsert', (input: unknown) => inventorySvc.upsertSupplier(input as never));
+
+// --- accounting ------------------------------------------------------------------------------
+
+register('accounting:add-income', (input: unknown) => accountingSvc.addIncome(input as never));
+register('accounting:add-expense', (input: unknown) => accountingSvc.addExpense(input as never));
+register('accounting:list', (kind: unknown, opts: unknown) => accountingSvc.listEntries(kind === 'income' ? 'income' : 'expense', opts as never));
+register('accounting:update', (kind: unknown, id: unknown, input: unknown) => {
+  accountingSvc.updateEntry(kind === 'income' ? 'income' : 'expense', Number(id), input as never);
+  return true;
+});
+register('accounting:delete', (kind: unknown, id: unknown) => {
+  accountingSvc.deleteEntry(kind === 'income' ? 'income' : 'expense', Number(id));
+  return true;
+});
+register('accounting:categories', (kind: unknown) => accountingSvc.listCategories(kind === 'income' ? 'income' : 'expense'));
+register('accounting:add-category', (kind: unknown, name: unknown) => accountingSvc.addCategory(kind === 'income' ? 'income' : 'expense', String(name)));
+register('accounting:report', (range: unknown) => accountingSvc.accountingReport(range as never));
+
+// --- staff -----------------------------------------------------------------------------------
+
+register('staff:list', (includeInactive: unknown) => staffSvc.listStaff(includeInactive === true));
+register('staff:get', (id: unknown) => staffSvc.getStaffMember(Number(id)));
+register('staff:create', (input: unknown) => staffSvc.createStaff(input as never));
+register('staff:update', (id: unknown, input: unknown) => {
+  staffSvc.updateStaff(Number(id), input as never);
+  return true;
+});
+register('staff:delete', (id: unknown) => {
+  staffSvc.softDeleteStaff(Number(id));
+  return true;
+});
+
+// --- attachments -------------------------------------------------------------------------------
+
+register('attachments:add', (opts: unknown) => attachmentsSvc.addAttachment(opts as never));
+register('attachments:list', (entityType: unknown, entityId: unknown) => attachmentsSvc.listAttachments(String(entityType), Number(entityId)));
+register('attachments:read', (id: unknown) => attachmentsSvc.readAttachment(Number(id)));
+register('attachments:delete', (id: unknown) => {
+  attachmentsSvc.deleteAttachment(Number(id));
+  return true;
+});
+
+// --- notifications -------------------------------------------------------------------------------
+
+register('notifications:list', (unreadOnly: unknown) => notificationsSvc.listNotifications(unreadOnly === true));
+register('notifications:unread', () => notificationsSvc.unreadCount());
+register('notifications:read', (id: unknown) => {
+  notificationsSvc.markRead(Number(id));
+  return true;
+});
+register('notifications:read-all', () => {
+  notificationsSvc.markAllRead();
+  return true;
+});
+register('notifications:refresh', () => {
+  notificationsSvc.refreshAlertNotifications();
+  return notificationsSvc.unreadCount();
+});
+
+// --- search -----------------------------------------------------------------------------------------
+
+register('search:global', (term: unknown) => searchSvc.globalSearch(String(term ?? '')));
+
+// --- backup & restore ---------------------------------------------------------------------------------
+
+register('backup:create', () => backupSvc.createBackup('manual'));
+register('backup:list', () => backupSvc.listBackups());
+register('backup:restore', (zipPath: unknown, confirmation: unknown) => backupSvc.restoreBackup(String(zipPath), String(confirmation)));
+register('backup:validate', (zipPath: unknown) => backupSvc.validateBackupFile(String(zipPath)));
+register('backup:folder', () => backupSvc.backupFolder());
+
 // --- wire-up ----------------------------------------------------------------------
 
 export function registerIpcHandlers(): void {
@@ -230,7 +455,7 @@ export function registerIpcHandlers(): void {
         if (sessionManager.isLocked() && !ALWAYS_ALLOWED.has(channel)) {
           return { ok: false, error: { code: 'LOCKED', message: 'Application is locked.' } };
         }
-        const data = handler(...args);
+        const data = await Promise.resolve(handler(...args));
         return { ok: true, data };
       } catch (err) {
         const safe = toSafeError(err);
