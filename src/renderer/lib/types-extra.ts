@@ -3,31 +3,57 @@
 export interface VisitRow {
   id: number;
   patient_id: number;
-  visit_date: string;
   dentist_id: number | null;
   dentist_name: string | null;
-  reason: string;
-  diagnosis: string | null;
-  notes: string | null;
+  visit_date: string;
+  chief_complaint: string;
+  history: string;
+  examination: string;
+  diagnosis: string;
+  treatment: string;
+  advice: string;
+  follow_up: string;
+  clinical_notes: string;
   status: string;
-  is_note: number | boolean;
-  has_files: number | boolean;
-  created_at: string;
 }
 
 export interface ChartTooth {
-  conditions: string[];
-  notes: string[];
-  lastEntry?: { condition: string; note: string | null; dentist_name: string | null; created_at: string };
+  id: number;
+  tooth_no: number;
+  condition: string;
+  surface: string;
+  dentition: string;
+  note: string;
+  created_at: string;
+  dentist_name: string | null;
+}
+
+export interface ChartData {
+  teeth: Record<string, ChartTooth>;
+  rows: ChartTooth[];
 }
 
 export interface TimelineEvent {
   at: string;
-  date?: string;
-  category: string;
-  label: string;
-  detail?: string;
-  meta?: Record<string, unknown>;
+  type: string;
+  title: string;
+  detail: string;
+  entityId: number;
+  who: string | null;
+}
+
+export interface ReferralRow {
+  id: number;
+  referred_at: string;
+  referring_dentist_id: number | null;
+  referring_dentist_name: string | null;
+  referred_to_doctor: string;
+  referred_to_clinic: string;
+  reason: string;
+  notes: string;
+  status: string;
+  follow_up_date: string | null;
+  outcome: string;
 }
 
 export interface TreatmentRow {

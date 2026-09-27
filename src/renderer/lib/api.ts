@@ -1,6 +1,6 @@
 /** Typed client over the preload bridge. Every call returns data or throws ApiError. */
 import type {
-  AccountingReport, AppointmentRow, AttachmentRow, BackupRow, Category, ChartTooth, InvoiceFull, InvoiceRow, InventoryRow, NotificationRow, PaymentsPage, PaymentMethod, PrescriptionFull, PrescriptionRow, QueueRow, SearchHit, StaffRow, TimelineEvent, TreatmentRow, VisitRow,
+  AccountingReport, AppointmentRow, AttachmentRow, BackupRow, Category, ChartData, InvoiceFull, InvoiceRow, InventoryRow, NotificationRow, PaymentsPage, PaymentMethod, PrescriptionFull, PrescriptionRow, QueueRow, SearchHit, StaffRow, TimelineEvent, TreatmentRow, VisitRow,
 } from './types-extra';
 
 export * from './types-extra';
@@ -100,7 +100,7 @@ export const api = {
   visitNotes: (patientId: number) => call<unknown[]>('visits:notes', patientId),
 
   // chart
-  chartCurrent: (patientId: number) => call<{ teeth: Record<string, ChartTooth>; rows: unknown[] }>('chart:current', patientId),
+  chartCurrent: (patientId: number) => call<ChartData>('chart:current', patientId),
   chartAdd: (input: unknown) => call<{ created: number }>('chart:add', input),
   chartClearTooth: (patientId: number, tooth: number) => call<boolean>('chart:clear-tooth', patientId, tooth),
   chartToothHistory: (patientId: number, tooth: number) => call<unknown[]>('chart:tooth-history', patientId, tooth),

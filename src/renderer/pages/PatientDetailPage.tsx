@@ -1,18 +1,28 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type PatientFull } from '../lib/api';
+import { api, type Dentist, type PatientFull } from '../lib/api';
 import type { NavCtx } from '../shell/AppShell';
 import { Badge, Button, ConfirmDialog, EmptyState, ErrorState, useToast } from '../components/ui';
 import { IconArrowLeft, IconEdit, IconPin, IconTrash, IconWallet } from '../components/Icons';
 import { formatBDT } from '../../shared/money';
 import { PatientEditor } from './PatientsPage';
+import {
+  VisitsTab, ChartTab, PatientPrescriptionsTab, TreatmentRecordsTab, ReferralsTab, TimelineTab, AttachmentsCard,
+} from './patient-clinical';
+
+type DetailTab = 'overview' | 'visits' | 'chart' | 'prescriptions' | 'treatments' | 'referrals' | 'timeline' | 'financial';
 
 export function PatientDetailPage({ ctx, id }: { ctx: NavCtx; id: number }) {
   const [p, setP] = useState<PatientFull | null>(null);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState<'overview' | 'financial'>('overview');
+  const [tab, setTab] = useState<DetailTab>('overview');
   const [editing, setEditing] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
+  const [dentists, setDentists] = useState<Dentist[]>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    api.dentistsList().then((d) => setDentists(d)).catch(() => undefined);
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -104,8 +114,20 @@ export function PatientDetailPage({ ctx, id }: { ctx: NavCtx; id: number }) {
       </div>
 
       <div className="tabs" role="tablist">
-        <button className={`tab ${tab === 'overview' ? 'active' : ''}`} onClick={() => setTab('overview')} role="tab">Overview</button>
-        <button className={`tab ${tab === 'financial' ? 'active' : ''}`} onClick={() => setTab('financial')} role="tab">Financial history</button>
+        {([
+          ['overview', 'Overview'],
+          ['visits', 'Visits'],
+          ['chart', 'Dental chart'],
+          ['treatments', 'Treatments'],
+          ['prescriptions', 'Prescriptions'],
+          ['referrals', 'Referrals'],
+          ['timeline', 'Timeline'],
+          ['financial', 'Financial'],
+        ] as Array<[DetailTab, string]>).map(([id2, label]) => (
+          <button key={id2} className={`tab ${tab === id2 ? 'active' : ''}`} onClick={() => setTab(id2)} role="tab">
+            {label}
+          </button>
+        ))}
       </div>
 
       <div style={{ marginTop: 16 }}>
@@ -122,15 +144,17 @@ export function PatientDetailPage({ ctx, id }: { ctx: NavCtx; id: number }) {
               <KV k="Past history" v={p.past_history || '—'} />
               <KV k="Notes" v={p.notes || '—'} />
             </InfoCard>
-            <div className="card card-pad" style={{ gridColumn: '1 / -1' }}>
-              <span className="card-title">Clinical record</span>
-              <div className="dp-sub" style={{ marginTop: 8 }}>
-                Visits, dental chart, prescriptions and the clinical timeline appear here — they are delivered with the Clinical
-                module of this build and always reflect real records.
-              </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <AttachmentsCard patientId={p.id} />
             </div>
           </div>
         )}
+        {tab === 'visits' && <VisitsTab patientId={p.id} dentists={dentists} />}
+        {tab === 'chart' && <ChartTab patientId={p.id} dentists={dentists} />}
+        {tab === 'treatments' && <TreatmentRecordsTab patientId={p.id} />}
+        {tab === 'prescriptions' && <PatientPrescriptionsTab patientId={p.id} onOpenFull={() => ctx.navigate('prescriptions')} />}
+        {tab === 'referrals' && <ReferralsTab patientId={p.id} />}
+        {tab === 'timeline' && <TimelineTab patientId={p.id} />}
         {tab === 'financial' && <FinancialHistory patientId={p.id} />}
       </div>
 
